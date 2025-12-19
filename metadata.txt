@@ -1,0 +1,29 @@
+[general]
+name=Timelapse
+qgisMinimumVersion=3.22
+description=Create timelapse animations from satellite and aerial imagery (NAIP, Sentinel-2, Sentinel-1) using Google Earth Engine
+version=1.0.0
+author=Qiusheng Wu
+email=giswqs@gmail.com
+about=A QGIS plugin for creating timelapse animations from remote sensing imagery with Google Earth Engine. Supports NAIP, Sentinel-2, and Sentinel-1 imagery. Users can define the area of interest by drawing a bounding box on the map or by providing a vector file.
+
+tracker=https://github.com/giswqs/qgis-timelapse-plugin/issues
+repository=https://github.com/giswqs/qgis-timelapse-plugin
+homepage=https://github.com/giswqs/qgis-timelapse-plugin
+
+tags=earth engine, timelapse, animation, satellite, sentinel, naip, remote sensing, gif
+
+category=Raster
+icon=icons/icon.png
+experimental=False
+deprecated=False
+
+changelog=
+    1.0.0:
+    - Initial release
+    - Support for NAIP timelapse
+    - Support for Sentinel-2 timelapse
+    - Support for Sentinel-1 timelapse
+    - Area of interest from map extent or vector layer
+    - GIF and MP4 output formats
+

@@ -1,0 +1,5 @@
+# QGIS Timelapse Plugin Requirements
+earthengine-api>=0.1.300
+Pillow>=9.0.0
+numpy>=1.20.0
+

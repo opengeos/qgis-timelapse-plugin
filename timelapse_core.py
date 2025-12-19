@@ -1,0 +1,1406 @@
+"""
+Timelapse Core Processing Module
+
+This module contains the core functionality for creating timelapse animations
+from satellite and aerial imagery using Google Earth Engine.
+Based on the geemap timelapse module.
+"""
+
+import datetime
+import glob
+import os
+import re
+import tempfile
+from typing import Optional, Union, List, Dict, Any
+
+try:
+    import ee
+except ImportError:
+    ee = None
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except ImportError:
+    Image = None
+    ImageDraw = None
+    ImageFont = None
+
+
+def check_dependencies() -> Dict[str, bool]:
+    """Check if all required dependencies are installed.
+    
+    Returns:
+        Dict with dependency names and their availability.
+    """
+    return {
+        'earthengine-api': ee is not None,
+        'Pillow': Image is not None,
+    }
+
+
+def get_ee_project() -> Optional[str]:
+    """Get GEE project ID from environment variable.
+    
+    Returns:
+        Project ID string or None.
+    """
+    return os.environ.get('EE_PROJECT_ID', None)
+
+
+def initialize_ee(project: str = None) -> bool:
+    """Initialize Google Earth Engine.
+    
+    Args:
+        project: GEE project ID. If None, uses EE_PROJECT_ID env variable.
+    
+    Returns:
+        True if initialization successful, False otherwise.
+    """
+    if ee is None:
+        return False
+    
+    # Use provided project or fall back to env variable
+    if project is None or project.strip() == '':
+        project = get_ee_project()
+    
+    try:
+        if project:
+            ee.Initialize(project=project)
+        else:
+            ee.Initialize()
+        return True
+    except Exception:
+        try:
+            ee.Authenticate()
+            if project:
+                ee.Initialize(project=project)
+            else:
+                ee.Initialize()
+            return True
+        except Exception:
+            return False
+
+
+def bbox_to_ee_geometry(
+    xmin: float,
+    ymin: float,
+    xmax: float,
+    ymax: float
+) -> 'ee.Geometry':
+    """Convert bounding box to Earth Engine Geometry.
+    
+    Args:
+        xmin: Minimum longitude.
+        ymin: Minimum latitude.
+        xmax: Maximum longitude.
+        ymax: Maximum latitude.
+    
+    Returns:
+        ee.Geometry.Rectangle object.
+    """
+    return ee.Geometry.Rectangle([xmin, ymin, xmax, ymax])
+
+
+def geojson_to_ee_geometry(geojson: dict) -> 'ee.Geometry':
+    """Convert GeoJSON to Earth Engine Geometry.
+    
+    Args:
+        geojson: GeoJSON dictionary.
+    
+    Returns:
+        ee.Geometry object.
+    """
+    return ee.Geometry(geojson)
+
+
+def create_timeseries(
+    collection: 'ee.ImageCollection',
+    start_date: str,
+    end_date: str,
+    region: 'ee.Geometry' = None,
+    bands: List[str] = None,
+    frequency: str = "year",
+    reducer: str = "median",
+    date_format: str = None,
+    drop_empty: bool = True,
+    step: int = 1,
+) -> 'ee.ImageCollection':
+    """Create a time series from an image collection.
+    
+    Args:
+        collection: Input image collection.
+        start_date: Start date in 'YYYY-MM-dd' format.
+        end_date: End date in 'YYYY-MM-dd' format.
+        region: Region of interest.
+        bands: List of band names.
+        frequency: Temporal frequency ('year', 'month', 'day').
+        reducer: Reducer type ('median', 'mean', 'min', 'max').
+        date_format: Output date format.
+        drop_empty: Whether to drop empty images.
+        step: Step size for date sequence.
+    
+    Returns:
+        ee.ImageCollection with aggregated images.
+    """
+    if region is not None:
+        collection = collection.filterBounds(region)
+    
+    collection = collection.filterDate(start_date, end_date)
+    
+    if bands is not None:
+        collection = collection.select(bands)
+    
+    # Get reducer function
+    reducers = {
+        'median': ee.Reducer.median(),
+        'mean': ee.Reducer.mean(),
+        'min': ee.Reducer.min(),
+        'max': ee.Reducer.max(),
+        'sum': ee.Reducer.sum(),
+    }
+    selected_reducer = reducers.get(reducer, ee.Reducer.median())
+    
+    # Set date format based on frequency
+    if date_format is None:
+        date_formats = {
+            'year': 'YYYY',
+            'month': 'YYYY-MM',
+            'day': 'YYYY-MM-dd',
+        }
+        date_format = date_formats.get(frequency, 'YYYY-MM-dd')
+    
+    # Create date sequence
+    start = ee.Date(start_date)
+    end = ee.Date(end_date)
+    
+    freq_units = {
+        'year': 'year',
+        'month': 'month',
+        'day': 'day',
+    }
+    unit = freq_units.get(frequency, 'year')
+    
+    # Generate sequence of dates
+    def get_sequence(start, end, unit, step):
+        diff = end.difference(start, unit).round()
+        sequence = ee.List.sequence(0, diff.subtract(1), step)
+        return sequence.map(lambda n: start.advance(n, unit))
+    
+    dates = get_sequence(start, end, unit, step)
+    
+    def aggregate_images(date):
+        date = ee.Date(date)
+        end_date = date.advance(1, unit)
+        filtered = collection.filterDate(date, end_date)
+        
+        if region is not None:
+            reduced = filtered.reduce(selected_reducer).clip(region)
+        else:
+            reduced = filtered.reduce(selected_reducer)
+        
+        return reduced.set({
+            'system:time_start': date.millis(),
+            'system:date': date.format(date_format),
+            'empty': filtered.size().eq(0),
+        })
+    
+    result = ee.ImageCollection(dates.map(aggregate_images))
+    
+    if drop_empty:
+        result = result.filterMetadata('empty', 'equals', 0)
+    
+    return result
+
+
+def naip_timeseries(
+    roi: 'ee.Geometry',
+    start_year: int = 2003,
+    end_year: int = None,
+    bands: List[str] = None,
+    step: int = 1,
+) -> 'ee.ImageCollection':
+    """Create NAIP annual time series.
+    
+    Args:
+        roi: Region of interest.
+        start_year: Starting year (default 2003).
+        end_year: Ending year (default current year).
+        bands: List of bands to use ('R', 'G', 'B', 'N').
+        step: Year step.
+    
+    Returns:
+        ee.ImageCollection of annual NAIP mosaics.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if bands is None:
+        bands = ['R', 'G', 'B']
+    
+    # Check if NIR band is requested
+    use_nir = 'N' in bands
+    
+    def get_annual_naip(year):
+        year = ee.Number(year)
+        collection = ee.ImageCollection("USDA/NAIP/DOQQ")
+        
+        if roi is not None:
+            collection = collection.filterBounds(roi)
+        
+        start_date = ee.Date.fromYMD(year, 1, 1)
+        end_date = ee.Date.fromYMD(year, 12, 31)
+        naip = collection.filterDate(start_date, end_date)
+        
+        # Filter for 4-band imagery if NIR is requested
+        if use_nir:
+            naip = naip.filter(ee.Filter.listContains("system:band_names", "N"))
+        
+        if roi is not None:
+            image = naip.mosaic().clip(roi)
+        else:
+            image = naip.mosaic()
+        
+        return image.set({
+            'system:time_start': start_date.millis(),
+            'system:time_end': end_date.millis(),
+            'system:date': start_date.format('YYYY'),
+            'empty': naip.size().eq(0),
+        })
+    
+    years = ee.List.sequence(start_year, end_year, step)
+    collection = ee.ImageCollection(years.map(get_annual_naip))
+    
+    return collection.filterMetadata('empty', 'equals', 0)
+
+
+def sentinel2_timeseries(
+    roi: 'ee.Geometry',
+    start_year: int = 2015,
+    end_year: int = None,
+    start_date: str = "06-10",
+    end_date: str = "09-20",
+    bands: List[str] = None,
+    apply_fmask: bool = True,
+    cloud_pct: int = 30,
+    frequency: str = "year",
+    reducer: str = "median",
+    step: int = 1,
+) -> 'ee.ImageCollection':
+    """Create Sentinel-2 time series.
+    
+    Args:
+        roi: Region of interest.
+        start_year: Starting year.
+        end_year: Ending year.
+        start_date: Start date within year (MM-dd).
+        end_date: End date within year (MM-dd).
+        bands: List of bands to include.
+        apply_fmask: Whether to apply cloud masking.
+        cloud_pct: Maximum cloud percentage.
+        frequency: Temporal frequency.
+        reducer: Reducer type.
+        step: Step size.
+    
+    Returns:
+        ee.ImageCollection of Sentinel-2 composites.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    # Band mapping
+    band_mapping = {
+        'Blue': 'B2',
+        'Green': 'B3',
+        'Red': 'B4',
+        'Red Edge 1': 'B5',
+        'Red Edge 2': 'B6',
+        'Red Edge 3': 'B7',
+        'NIR': 'B8',
+        'Red Edge 4': 'B8A',
+        'SWIR1': 'B11',
+        'SWIR2': 'B12',
+        'QA60': 'QA60',
+    }
+    
+    if bands is None:
+        bands = ['B8', 'B4', 'B3']  # NIR, Red, Green
+    else:
+        bands = [band_mapping.get(b, b) for b in bands]
+    
+    def mask_clouds(image):
+        """Apply cloud mask to Sentinel-2 image."""
+        qa = image.select('QA60')
+        cloud_bit_mask = 1 << 10
+        cirrus_bit_mask = 1 << 11
+        mask = qa.bitwiseAnd(cloud_bit_mask).eq(0).And(
+            qa.bitwiseAnd(cirrus_bit_mask).eq(0)
+        )
+        return image.updateMask(mask).divide(10000)
+    
+    start_month = int(start_date.split('-')[0])
+    start_day = int(start_date.split('-')[1])
+    end_month = int(end_date.split('-')[0])
+    end_day = int(end_date.split('-')[1])
+    
+    def get_annual_s2(year):
+        year = ee.Number(year)
+        start = ee.Date.fromYMD(year, start_month, start_day)
+        end = ee.Date.fromYMD(year, end_month, end_day)
+        
+        collection = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+            .filterBounds(roi)
+            .filterDate(start, end)
+            .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', cloud_pct)))
+        
+        if apply_fmask:
+            collection = collection.map(mask_clouds)
+        else:
+            collection = collection.map(lambda img: img.divide(10000))
+        
+        # Select bands (excluding QA60 for final output)
+        select_bands = [b for b in bands if b != 'QA60']
+        collection = collection.select(select_bands)
+        
+        composite = collection.median()
+        
+        if roi is not None:
+            composite = composite.clip(roi)
+        
+        return composite.set({
+            'system:time_start': start.millis(),
+            'system:date': start.format('YYYY'),
+            'empty': collection.size().eq(0),
+        })
+    
+    years = ee.List.sequence(start_year, end_year, step)
+    result = ee.ImageCollection(years.map(get_annual_s2))
+    
+    return result.filterMetadata('empty', 'equals', 0)
+
+
+def sentinel1_timeseries(
+    roi: 'ee.Geometry',
+    start_year: int = 2015,
+    end_year: int = None,
+    start_date: str = "01-01",
+    end_date: str = "12-31",
+    bands: List[str] = None,
+    orbit: List[str] = None,
+    frequency: str = "year",
+    reducer: str = "median",
+    step: int = 1,
+) -> 'ee.ImageCollection':
+    """Create Sentinel-1 time series.
+    
+    Args:
+        roi: Region of interest.
+        start_year: Starting year.
+        end_year: Ending year.
+        start_date: Start date within year (MM-dd).
+        end_date: End date within year (MM-dd).
+        bands: List of bands (VV, VH, HH, HV).
+        orbit: Orbit direction ('ascending', 'descending', or both).
+        frequency: Temporal frequency.
+        reducer: Reducer type.
+        step: Step size.
+    
+    Returns:
+        ee.ImageCollection of Sentinel-1 composites.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if bands is None:
+        bands = ['VV']
+    
+    if orbit is None:
+        orbit = ['ASCENDING', 'DESCENDING']
+    else:
+        orbit = [o.upper() for o in orbit]
+    
+    start_month = int(start_date.split('-')[0])
+    start_day = int(start_date.split('-')[1])
+    end_month = int(end_date.split('-')[0])
+    end_day = int(end_date.split('-')[1])
+    
+    def get_annual_s1(year):
+        year = ee.Number(year)
+        start = ee.Date.fromYMD(year, start_month, start_day)
+        end = ee.Date.fromYMD(year, end_month, end_day)
+        
+        collection = (ee.ImageCollection('COPERNICUS/S1_GRD')
+            .filterBounds(roi)
+            .filterDate(start, end)
+            .filter(ee.Filter.inList('orbitProperties_pass', orbit))
+            .filter(ee.Filter.listContains('transmitterReceiverPolarisation', bands[0]))
+            .filter(ee.Filter.eq('instrumentMode', 'IW'))
+            .select(bands))
+        
+        composite = collection.median()
+        
+        if roi is not None:
+            composite = composite.clip(roi)
+        
+        return composite.set({
+            'system:time_start': start.millis(),
+            'system:date': start.format('YYYY'),
+            'empty': collection.size().eq(0),
+        })
+    
+    years = ee.List.sequence(start_year, end_year, step)
+    result = ee.ImageCollection(years.map(get_annual_s1))
+    
+    return result.filterMetadata('empty', 'equals', 0)
+
+
+def landsat_timeseries(
+    roi: 'ee.Geometry',
+    start_year: int = 1984,
+    end_year: int = None,
+    start_date: str = "06-10",
+    end_date: str = "09-20",
+    apply_fmask: bool = True,
+    step: int = 1,
+) -> 'ee.ImageCollection':
+    """Create Landsat annual time series.
+    
+    Combines Landsat 4, 5, 7, 8, and 9 surface reflectance data
+    with consistent band naming: Blue, Green, Red, NIR, SWIR1, SWIR2.
+    
+    Args:
+        roi: Region of interest.
+        start_year: Starting year (default 1984).
+        end_year: Ending year (default current year).
+        start_date: Start date within year (MM-dd).
+        end_date: End date within year (MM-dd).
+        apply_fmask: Whether to apply cloud/shadow masking.
+        step: Year step.
+    
+    Returns:
+        ee.ImageCollection of annual Landsat composites.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    start_month = int(start_date.split('-')[0])
+    start_day = int(start_date.split('-')[1])
+    end_month = int(end_date.split('-')[0])
+    end_day = int(end_date.split('-')[1])
+    
+    # Calculate days between start and end date
+    d1 = datetime.datetime(2000, start_month, start_day)
+    d2 = datetime.datetime(2000, end_month, end_day)
+    n_days = abs((d2 - d1).days)
+    
+    # Landsat collections
+    LC09col = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
+    LC08col = ee.ImageCollection("LANDSAT/LC08/C02/T1_L2")
+    LE07col = ee.ImageCollection("LANDSAT/LE07/C02/T1_L2")
+    LT05col = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
+    LT04col = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2")
+    
+    def col_filter(col, roi, start_date, end_date):
+        return col.filterBounds(roi).filterDate(start_date, end_date)
+    
+    def rename_oli(img):
+        """Rename OLI bands (Landsat 8, 9)."""
+        return img.select(
+            ['SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B6', 'SR_B7'],
+            ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']
+        )
+    
+    def rename_etm(img):
+        """Rename ETM+/TM bands (Landsat 4, 5, 7)."""
+        return img.select(
+            ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7'],
+            ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']
+        )
+    
+    def apply_scale_factors(img):
+        """Apply scaling factors to Landsat SR data."""
+        optical = img.select('SR_B.').multiply(0.0000275).add(-0.2)
+        return img.addBands(optical, None, True)
+    
+    def fmask(image):
+        """Apply quality mask to Landsat image."""
+        qa_mask = image.select('QA_PIXEL').bitwiseAnd(int('11111', 2)).eq(0)
+        return image.updateMask(qa_mask)
+    
+    def prep_oli(img):
+        """Prepare OLI image (Landsat 8, 9)."""
+        orig = img
+        if apply_fmask:
+            img = fmask(img)
+        img = apply_scale_factors(img)
+        img = rename_oli(img)
+        return ee.Image(img.copyProperties(orig, orig.propertyNames())).resample('bicubic')
+    
+    def prep_etm(img):
+        """Prepare ETM+/TM image (Landsat 4, 5, 7)."""
+        orig = img
+        if apply_fmask:
+            img = fmask(img)
+        img = apply_scale_factors(img)
+        img = rename_etm(img)
+        return ee.Image(img.copyProperties(orig, orig.propertyNames())).resample('bicubic')
+    
+    # Dummy image for missing years
+    band_names = ee.List(['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2'])
+    filler_values = ee.List.repeat(0, band_names.size())
+    dummy_img = ee.Image.constant(filler_values).rename(band_names).selfMask().float()
+    
+    def get_annual_comp(year):
+        year = ee.Number(year)
+        start = ee.Date.fromYMD(year, start_month, start_day)
+        end = start.advance(n_days, 'day')
+        
+        # Filter and prepare each collection
+        lc09 = col_filter(LC09col, roi, start, end).map(prep_oli)
+        lc08 = col_filter(LC08col, roi, start, end).map(prep_oli)
+        le07 = col_filter(LE07col, roi, start, end).map(prep_etm)
+        lt05 = col_filter(LT05col, roi, start, end).map(prep_etm)
+        lt04 = col_filter(LT04col, roi, start, end).map(prep_etm)
+        
+        # Merge collections
+        col = lc09.merge(lc08).merge(le07).merge(lt05).merge(lt04)
+        
+        composite = col.median()
+        n_bands = composite.bandNames().size()
+        composite = ee.Image(ee.Algorithms.If(n_bands, composite, dummy_img))
+        
+        if roi is not None:
+            composite = composite.clip(roi)
+        
+        return composite.set({
+            'year': year,
+            'system:time_start': start.millis(),
+            'system:date': start.format('YYYY'),
+            'nBands': n_bands,
+            'empty': n_bands.eq(0),
+        })
+    
+    years = ee.List.sequence(start_year, end_year, step)
+    result = ee.ImageCollection(years.map(get_annual_comp))
+    
+    return result.filterMetadata('empty', 'equals', 0)
+
+
+def download_ee_video(
+    collection: 'ee.ImageCollection',
+    video_args: dict,
+    out_gif: str,
+) -> str:
+    """Download Earth Engine video/animation.
+    
+    Args:
+        collection: Image collection to animate.
+        video_args: Video parameters dict.
+        out_gif: Output GIF path.
+    
+    Returns:
+        Path to output GIF.
+    """
+    import urllib.request
+    
+    url = collection.getVideoThumbURL(video_args)
+    
+    # Download the GIF
+    urllib.request.urlretrieve(url, out_gif)
+    
+    return out_gif
+
+
+def make_gif(
+    images: Union[List[str], str],
+    out_gif: str,
+    ext: str = "jpg",
+    fps: int = 10,
+    loop: int = 0,
+    clean_up: bool = False,
+) -> None:
+    """Create a GIF from a list of images.
+    
+    Args:
+        images: List of image paths or directory.
+        out_gif: Output GIF path.
+        ext: Image extension.
+        fps: Frames per second.
+        loop: Number of loops (0 = infinite).
+        clean_up: Whether to delete source images.
+    """
+    if isinstance(images, str) and os.path.isdir(images):
+        images = list(glob.glob(os.path.join(images, f"*.{ext}")))
+    
+    if not images:
+        raise ValueError("No images found.")
+    
+    images.sort()
+    
+    frames = [Image.open(img) for img in images]
+    frame_one = frames[0]
+    frame_one.save(
+        out_gif,
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=int(1000 / fps),
+        loop=loop,
+    )
+    
+    if clean_up:
+        for image in images:
+            os.remove(image)
+
+
+def add_text_to_gif(
+    in_gif: str,
+    out_gif: str,
+    text_sequence: Union[str, List[str]],
+    xy: tuple = ("2%", "2%"),
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+) -> None:
+    """Add text overlay to each frame of a GIF.
+    
+    Args:
+        in_gif: Input GIF path.
+        out_gif: Output GIF path.
+        text_sequence: Text for each frame.
+        xy: Position of text.
+        font_size: Font size.
+        font_color: Font color.
+        add_progress_bar: Whether to add progress bar.
+        progress_bar_color: Progress bar color.
+        progress_bar_height: Progress bar height.
+        loop: Loop count.
+    """
+    gif = Image.open(in_gif)
+    
+    frames = []
+    n_frames = gif.n_frames
+    
+    if isinstance(text_sequence, str):
+        text_sequence = [text_sequence] * n_frames
+    elif len(text_sequence) < n_frames:
+        text_sequence = text_sequence + [text_sequence[-1]] * (n_frames - len(text_sequence))
+    
+    # Try to load a font
+    try:
+        font = ImageFont.truetype("arial.ttf", font_size)
+    except:
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
+    
+    for i in range(n_frames):
+        gif.seek(i)
+        frame = gif.copy().convert("RGBA")
+        draw = ImageDraw.Draw(frame)
+        
+        # Calculate position
+        width, height = frame.size
+        if isinstance(xy[0], str) and "%" in xy[0]:
+            x = int(width * float(xy[0].strip("%")) / 100)
+        else:
+            x = int(xy[0])
+        
+        if isinstance(xy[1], str) and "%" in xy[1]:
+            y = int(height * float(xy[1].strip("%")) / 100)
+        else:
+            y = int(xy[1])
+        
+        # Draw text
+        text = text_sequence[i] if i < len(text_sequence) else ""
+        draw.text((x, y), text, font=font, fill=font_color)
+        
+        # Add progress bar
+        if add_progress_bar:
+            progress = (i + 1) / n_frames
+            bar_width = int(width * progress)
+            bar_y = height - progress_bar_height
+            draw.rectangle(
+                [(0, bar_y), (bar_width, height)],
+                fill=progress_bar_color
+            )
+        
+        frames.append(frame.convert("P", palette=Image.ADAPTIVE))
+    
+    # Get original duration
+    duration = gif.info.get('duration', 100)
+    
+    # Save new GIF
+    frames[0].save(
+        out_gif,
+        format="GIF",
+        append_images=frames[1:],
+        save_all=True,
+        duration=duration,
+        loop=loop,
+    )
+
+
+def gif_to_mp4(in_gif: str, out_mp4: str) -> bool:
+    """Convert GIF to MP4 using ffmpeg.
+    
+    Args:
+        in_gif: Input GIF path.
+        out_mp4: Output MP4 path.
+    
+    Returns:
+        True if successful, False otherwise.
+    """
+    import subprocess
+    import shutil
+    
+    if not shutil.which('ffmpeg'):
+        return False
+    
+    if not os.path.exists(in_gif):
+        return False
+    
+    out_mp4 = os.path.abspath(out_mp4)
+    os.makedirs(os.path.dirname(out_mp4), exist_ok=True)
+    
+    # Get dimensions
+    img = Image.open(in_gif)
+    width, height = img.size
+    img.close()
+    
+    # Ensure even dimensions for h264
+    width = width + (width % 2)
+    height = height + (height % 2)
+    
+    cmd = [
+        'ffmpeg', '-y', '-loglevel', 'error',
+        '-i', in_gif,
+        '-vf', f'scale={width}:{height}',
+        '-vcodec', 'libx264',
+        '-crf', '25',
+        '-pix_fmt', 'yuv420p',
+        out_mp4
+    ]
+    
+    try:
+        subprocess.run(cmd, check=True)
+        return os.path.exists(out_mp4)
+    except subprocess.CalledProcessError:
+        return False
+
+
+def create_naip_timelapse(
+    roi: 'ee.Geometry',
+    start_year: int = 2003,
+    end_year: int = None,
+    out_gif: str = None,
+    bands: List[str] = None,
+    vis_params: dict = None,
+    dimensions: int = 768,
+    frames_per_second: int = 3,
+    crs: str = "EPSG:3857",
+    title: str = None,
+    add_text: bool = True,
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+    mp4: bool = False,
+    step: int = 1,
+) -> str:
+    """Create a timelapse from NAIP imagery.
+    
+    Args:
+        roi: Region of interest geometry.
+        start_year: Starting year.
+        end_year: Ending year.
+        out_gif: Output GIF path.
+        bands: Bands to visualize ('R', 'G', 'B', 'N').
+        vis_params: Visualization parameters.
+        dimensions: Output dimensions.
+        frames_per_second: Animation speed.
+        crs: Coordinate reference system.
+        title: Title text.
+        add_text: Whether to add date text.
+        font_size: Font size.
+        font_color: Font color.
+        add_progress_bar: Whether to add progress bar.
+        progress_bar_color: Progress bar color.
+        progress_bar_height: Progress bar height.
+        loop: Loop count.
+        mp4: Whether to also create MP4.
+        step: Year step.
+    
+    Returns:
+        Path to output GIF.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if out_gif is None:
+        out_gif = os.path.join(tempfile.gettempdir(), 'naip_timelapse.gif')
+    
+    out_gif = os.path.abspath(out_gif)
+    os.makedirs(os.path.dirname(out_gif), exist_ok=True)
+    
+    if bands is None:
+        bands = ['R', 'G', 'B']
+    
+    if vis_params is None:
+        vis_params = {'min': 0, 'max': 255, 'bands': bands}
+    
+    # Create time series
+    collection = naip_timeseries(roi, start_year, end_year, bands=bands, step=step)
+    
+    # Visualize collection
+    vis_collection = collection.map(
+        lambda img: img.visualize(**vis_params).set({
+            'system:time_start': img.get('system:time_start'),
+            'system:date': img.get('system:date'),
+        })
+    )
+    
+    # Video arguments
+    video_args = {
+        'dimensions': dimensions,
+        'region': roi,
+        'framesPerSecond': frames_per_second,
+        'crs': crs,
+        'min': 0,
+        'max': 255,
+        'bands': ['vis-red', 'vis-green', 'vis-blue'],
+    }
+    
+    # Download video
+    download_ee_video(vis_collection, video_args, out_gif)
+    
+    # Add text overlay
+    if add_text:
+        dates = vis_collection.aggregate_array('system:date').getInfo()
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            dates,
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=add_progress_bar,
+            progress_bar_color=progress_bar_color,
+            progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+    
+    # Convert to MP4 if requested
+    if mp4:
+        out_mp4 = out_gif.replace('.gif', '.mp4')
+        gif_to_mp4(out_gif, out_mp4)
+    
+    return out_gif
+
+
+def create_sentinel2_timelapse(
+    roi: 'ee.Geometry',
+    start_year: int = 2015,
+    end_year: int = None,
+    start_date: str = "06-10",
+    end_date: str = "09-20",
+    out_gif: str = None,
+    bands: List[str] = None,
+    vis_params: dict = None,
+    dimensions: int = 768,
+    frames_per_second: int = 5,
+    crs: str = "EPSG:3857",
+    apply_fmask: bool = True,
+    cloud_pct: int = 30,
+    title: str = None,
+    add_text: bool = True,
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+    mp4: bool = False,
+    step: int = 1,
+) -> str:
+    """Create a timelapse from Sentinel-2 imagery.
+    
+    Args:
+        roi: Region of interest geometry.
+        start_year: Starting year.
+        end_year: Ending year.
+        start_date: Start date within each year (MM-dd).
+        end_date: End date within each year (MM-dd).
+        out_gif: Output GIF path.
+        bands: Bands to visualize.
+        vis_params: Visualization parameters.
+        dimensions: Output dimensions.
+        frames_per_second: Animation speed.
+        crs: Coordinate reference system.
+        apply_fmask: Whether to apply cloud masking.
+        cloud_pct: Maximum cloud percentage.
+        title: Title text.
+        add_text: Whether to add date text.
+        font_size: Font size.
+        font_color: Font color.
+        add_progress_bar: Whether to add progress bar.
+        progress_bar_color: Progress bar color.
+        progress_bar_height: Progress bar height.
+        loop: Loop count.
+        mp4: Whether to also create MP4.
+        step: Year step.
+    
+    Returns:
+        Path to output GIF.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if out_gif is None:
+        out_gif = os.path.join(tempfile.gettempdir(), 'sentinel2_timelapse.gif')
+    
+    out_gif = os.path.abspath(out_gif)
+    os.makedirs(os.path.dirname(out_gif), exist_ok=True)
+    
+    if bands is None:
+        bands = ['NIR', 'Red', 'Green']
+    
+    # Band mapping for visualization
+    band_mapping = {
+        'Blue': 'B2', 'Green': 'B3', 'Red': 'B4',
+        'NIR': 'B8', 'SWIR1': 'B11', 'SWIR2': 'B12',
+    }
+    ee_bands = [band_mapping.get(b, b) for b in bands]
+    
+    if vis_params is None:
+        vis_params = {'min': 0, 'max': 0.4, 'bands': ee_bands}
+    
+    # Create time series
+    collection = sentinel2_timeseries(
+        roi, start_year, end_year, start_date, end_date,
+        bands=bands, apply_fmask=apply_fmask, cloud_pct=cloud_pct, step=step
+    )
+    
+    # Visualize collection
+    vis_collection = collection.map(
+        lambda img: img.visualize(**vis_params).set({
+            'system:time_start': img.get('system:time_start'),
+            'system:date': img.get('system:date'),
+        })
+    )
+    
+    # Video arguments
+    video_args = {
+        'dimensions': dimensions,
+        'region': roi,
+        'framesPerSecond': frames_per_second,
+        'crs': crs,
+        'min': 0,
+        'max': 255,
+        'bands': ['vis-red', 'vis-green', 'vis-blue'],
+    }
+    
+    # Download video
+    download_ee_video(vis_collection, video_args, out_gif)
+    
+    # Add text overlay
+    if add_text:
+        dates = vis_collection.aggregate_array('system:date').getInfo()
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            dates,
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=add_progress_bar,
+            progress_bar_color=progress_bar_color,
+            progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+    
+    # Convert to MP4 if requested
+    if mp4:
+        out_mp4 = out_gif.replace('.gif', '.mp4')
+        gif_to_mp4(out_gif, out_mp4)
+    
+    return out_gif
+
+
+def create_sentinel1_timelapse(
+    roi: 'ee.Geometry',
+    start_year: int = 2015,
+    end_year: int = None,
+    start_date: str = "01-01",
+    end_date: str = "12-31",
+    out_gif: str = None,
+    bands: List[str] = None,
+    vis_params: dict = None,
+    palette: str = "Greys",
+    dimensions: int = 768,
+    frames_per_second: int = 5,
+    crs: str = "EPSG:3857",
+    orbit: List[str] = None,
+    title: str = None,
+    add_text: bool = True,
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+    mp4: bool = False,
+    step: int = 1,
+) -> str:
+    """Create a timelapse from Sentinel-1 imagery.
+    
+    Args:
+        roi: Region of interest geometry.
+        start_year: Starting year.
+        end_year: Ending year.
+        start_date: Start date within each year (MM-dd).
+        end_date: End date within each year (MM-dd).
+        out_gif: Output GIF path.
+        bands: Bands to visualize (VV, VH, HH, HV).
+        vis_params: Visualization parameters.
+        palette: Color palette for visualization.
+        dimensions: Output dimensions.
+        frames_per_second: Animation speed.
+        crs: Coordinate reference system.
+        orbit: Orbit directions to include.
+        title: Title text.
+        add_text: Whether to add date text.
+        font_size: Font size.
+        font_color: Font color.
+        add_progress_bar: Whether to add progress bar.
+        progress_bar_color: Progress bar color.
+        progress_bar_height: Progress bar height.
+        loop: Loop count.
+        mp4: Whether to also create MP4.
+        step: Year step.
+    
+    Returns:
+        Path to output GIF.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if out_gif is None:
+        out_gif = os.path.join(tempfile.gettempdir(), 'sentinel1_timelapse.gif')
+    
+    out_gif = os.path.abspath(out_gif)
+    os.makedirs(os.path.dirname(out_gif), exist_ok=True)
+    
+    if bands is None:
+        bands = ['VV']
+    
+    if orbit is None:
+        orbit = ['ascending', 'descending']
+    
+    # For single band, use a grayscale palette
+    if vis_params is None:
+        vis_params = {'min': -30, 'max': 0}
+        if len(bands) == 1:
+            vis_params['bands'] = bands
+            vis_params['palette'] = ['000000', 'ffffff']
+        else:
+            vis_params['bands'] = bands
+    
+    # Create time series
+    collection = sentinel1_timeseries(
+        roi, start_year, end_year, start_date, end_date,
+        bands=bands, orbit=orbit, step=step
+    )
+    
+    # Visualize collection - always outputs vis-red, vis-green, vis-blue
+    vis_collection = collection.map(
+        lambda img: img.visualize(**vis_params).set({
+            'system:time_start': img.get('system:time_start'),
+            'system:date': img.get('system:date'),
+        })
+    )
+    
+    # Video arguments - visualize() always creates RGB output
+    video_args = {
+        'dimensions': dimensions,
+        'region': roi,
+        'framesPerSecond': frames_per_second,
+        'crs': crs,
+        'min': 0,
+        'max': 255,
+        'bands': ['vis-red', 'vis-green', 'vis-blue'],
+    }
+    
+    # Download video
+    download_ee_video(vis_collection, video_args, out_gif)
+    
+    # Add text overlay
+    if add_text:
+        dates = vis_collection.aggregate_array('system:date').getInfo()
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            dates,
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=add_progress_bar,
+            progress_bar_color=progress_bar_color,
+            progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+    
+    # Convert to MP4 if requested
+    if mp4:
+        out_mp4 = out_gif.replace('.gif', '.mp4')
+        gif_to_mp4(out_gif, out_mp4)
+    
+    return out_gif
+
+
+def create_landsat_timelapse(
+    roi: 'ee.Geometry',
+    start_year: int = 1984,
+    end_year: int = None,
+    start_date: str = "06-10",
+    end_date: str = "09-20",
+    out_gif: str = None,
+    bands: List[str] = None,
+    vis_params: dict = None,
+    dimensions: int = 768,
+    frames_per_second: int = 5,
+    crs: str = "EPSG:3857",
+    apply_fmask: bool = True,
+    title: str = None,
+    add_text: bool = True,
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+    mp4: bool = False,
+    step: int = 1,
+) -> str:
+    """Create a timelapse from Landsat imagery.
+    
+    Combines Landsat 4, 5, 7, 8, and 9 for long-term time series (1984-present).
+    
+    Args:
+        roi: Region of interest geometry.
+        start_year: Starting year (1984 or later).
+        end_year: Ending year.
+        start_date: Start date within each year (MM-dd).
+        end_date: End date within each year (MM-dd).
+        out_gif: Output GIF path.
+        bands: Bands to visualize (Blue, Green, Red, NIR, SWIR1, SWIR2).
+        vis_params: Visualization parameters.
+        dimensions: Output dimensions.
+        frames_per_second: Animation speed.
+        crs: Coordinate reference system.
+        apply_fmask: Whether to apply cloud masking.
+        title: Title text.
+        add_text: Whether to add date text.
+        font_size: Font size.
+        font_color: Font color.
+        add_progress_bar: Whether to add progress bar.
+        progress_bar_color: Progress bar color.
+        progress_bar_height: Progress bar height.
+        loop: Loop count.
+        mp4: Whether to also create MP4.
+        step: Year step.
+    
+    Returns:
+        Path to output GIF.
+    """
+    if end_year is None:
+        end_year = datetime.datetime.now().year
+    
+    if out_gif is None:
+        out_gif = os.path.join(tempfile.gettempdir(), 'landsat_timelapse.gif')
+    
+    out_gif = os.path.abspath(out_gif)
+    os.makedirs(os.path.dirname(out_gif), exist_ok=True)
+    
+    if bands is None:
+        bands = ['NIR', 'Red', 'Green']
+    
+    if vis_params is None:
+        vis_params = {'min': 0, 'max': 0.4, 'bands': bands, 'gamma': [1, 1, 1]}
+    
+    # Create time series
+    collection = landsat_timeseries(
+        roi, start_year, end_year, start_date, end_date,
+        apply_fmask=apply_fmask, step=step
+    )
+    
+    # Select bands and visualize
+    vis_collection = collection.select(bands).map(
+        lambda img: img.visualize(**vis_params).set({
+            'system:time_start': img.get('system:time_start'),
+            'system:date': img.get('system:date'),
+        })
+    )
+    
+    # Video arguments
+    video_args = {
+        'dimensions': dimensions,
+        'region': roi,
+        'framesPerSecond': frames_per_second,
+        'crs': crs,
+        'min': 0,
+        'max': 255,
+        'bands': ['vis-red', 'vis-green', 'vis-blue'],
+    }
+    
+    # Download video
+    download_ee_video(vis_collection, video_args, out_gif)
+    
+    # Add text overlay
+    if add_text:
+        dates = vis_collection.aggregate_array('system:date').getInfo()
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            dates,
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=add_progress_bar,
+            progress_bar_color=progress_bar_color,
+            progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+    
+    # Convert to MP4 if requested
+    if mp4:
+        out_mp4 = out_gif.replace('.gif', '.mp4')
+        gif_to_mp4(out_gif, out_mp4)
+    
+    return out_gif
+
+
+def modis_ndvi_timeseries(
+    roi: 'ee.Geometry',
+    data: str = "Terra",
+    band: str = "NDVI",
+    start_date: str = None,
+    end_date: str = None,
+) -> 'ee.ImageCollection':
+    """Create MODIS NDVI time series by day of year."""
+    if data == "Terra":
+        col = ee.ImageCollection("MODIS/061/MOD13A2").select(band)
+    else:
+        col = ee.ImageCollection("MODIS/061/MYD13A2").select(band)
+    
+    if start_date and end_date:
+        col = col.filterDate(start_date, end_date)
+    
+    if roi is not None:
+        col = col.filterBounds(roi)
+    
+    def set_doy(img):
+        doy = ee.Date(img.get("system:time_start")).getRelative("day", "year")
+        return img.set("doy", doy)
+    
+    col = col.map(set_doy)
+    distinct_doy = col.filterDate("2013-01-01", "2014-01-01")
+    filter_eq = ee.Filter.equals(leftField="doy", rightField="doy")
+    join = ee.Join.saveAll("doy_matches")
+    join_col = ee.ImageCollection(join.apply(distinct_doy, col, filter_eq))
+    
+    def match_doy(img):
+        doy_col = ee.ImageCollection.fromImages(img.get("doy_matches"))
+        return doy_col.reduce(ee.Reducer.median()).set({
+            'system:index': img.get('system:index'),
+            'system:time_start': img.get('system:time_start'),
+        })
+    
+    comp = join_col.map(match_doy)
+    if roi is not None:
+        comp = comp.map(lambda img: img.clip(roi))
+    return comp
+
+
+def create_modis_ndvi_timelapse(
+    roi: 'ee.Geometry',
+    out_gif: str = None,
+    data: str = "Terra",
+    band: str = "NDVI",
+    start_date: str = None,
+    end_date: str = None,
+    dimensions: int = 768,
+    frames_per_second: int = 10,
+    crs: str = "EPSG:3857",
+    add_text: bool = True,
+    font_size: int = 20,
+    font_color: str = "white",
+    add_progress_bar: bool = True,
+    progress_bar_color: str = "white",
+    progress_bar_height: int = 5,
+    loop: int = 0,
+    mp4: bool = False,
+) -> str:
+    """Create MODIS NDVI/EVI timelapse showing vegetation phenology."""
+    if out_gif is None:
+        out_gif = os.path.join(tempfile.gettempdir(), 'modis_ndvi_timelapse.gif')
+    
+    out_gif = os.path.abspath(out_gif)
+    os.makedirs(os.path.dirname(out_gif), exist_ok=True)
+    
+    collection = modis_ndvi_timeseries(roi, data, band, start_date, end_date)
+    
+    vis_params = {
+        'min': 0.0,
+        'max': 9000.0,
+        'palette': [
+            'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163',
+            '99B718', '74A901', '66A000', '529400', '3E8601',
+            '207401', '056201', '004C00', '023B01', '012E01',
+            '011D01', '011301',
+        ],
+    }
+    
+    vis_collection = collection.map(
+        lambda img: img.visualize(**vis_params).set({
+            'system:index': img.get('system:index'),
+            'system:time_start': img.get('system:time_start'),
+        })
+    )
+    
+    video_args = {
+        'dimensions': dimensions,
+        'region': roi,
+        'framesPerSecond': frames_per_second,
+        'crs': crs,
+    }
+    
+    download_ee_video(vis_collection, video_args, out_gif)
+    
+    if add_text:
+        text = vis_collection.aggregate_array('system:index').getInfo()
+        text_sequence = []
+        for t in text:
+            try:
+                parts = t.replace('_', '-')[5:]
+                month = int(parts[:2])
+                day = int(parts[3:5])
+                months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                text_sequence.append(f"{months[month-1]} {day:02d}")
+            except:
+                text_sequence.append(t)
+        
+        add_text_to_gif(
+            out_gif, out_gif, text_sequence,
+            font_size=font_size, font_color=font_color,
+            add_progress_bar=add_progress_bar,
+            progress_bar_color=progress_bar_color,
+            progress_bar_height=progress_bar_height, loop=loop,
+        )
+    
+    if mp4:
+        gif_to_mp4(out_gif, out_gif.replace('.gif', '.mp4'))
+    
+    return out_gif
