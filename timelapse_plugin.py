@@ -26,10 +26,10 @@ class TimelapsePlugin:
         """
         self.iface = iface
         self.plugin_dir = Path(__file__).parent
-        
+
         # Initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = self.plugin_dir / 'i18n' / f'timelapse_{locale}.qm'
+        locale = QSettings().value("locale/userLocale")[0:2]
+        locale_path = self.plugin_dir / "i18n" / f"timelapse_{locale}.qm"
 
         if locale_path.exists():
             self.translator = QTranslator()
@@ -37,10 +37,10 @@ class TimelapsePlugin:
             QCoreApplication.installTranslator(self.translator)
 
         self.actions = []
-        self.menu = self.tr('&Timelapse')
-        self.toolbar = self.iface.addToolBar('Timelapse')
-        self.toolbar.setObjectName('TimelapseToolbar')
-        
+        self.menu = self.tr("&Timelapse")
+        self.toolbar = self.iface.addToolBar("Timelapse")
+        self.toolbar.setObjectName("TimelapseToolbar")
+
         self.dock_widget = None
 
     def tr(self, message):
@@ -48,11 +48,11 @@ class TimelapsePlugin:
 
         Args:
             message: String to translate.
-        
+
         Returns:
             str: Translated string.
         """
-        return QCoreApplication.translate('TimelapsePlugin', message)
+        return QCoreApplication.translate("TimelapsePlugin", message)
 
     def add_action(
         self,
@@ -64,7 +64,7 @@ class TimelapsePlugin:
         add_to_toolbar=True,
         status_tip=None,
         whats_this=None,
-        parent=None
+        parent=None,
     ):
         """Add a toolbar icon and menu item.
 
@@ -78,7 +78,7 @@ class TimelapsePlugin:
             status_tip: Status bar message.
             whats_this: What's This help text.
             parent: Parent widget.
-        
+
         Returns:
             QAction: The created action.
         """
@@ -104,26 +104,26 @@ class TimelapsePlugin:
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
-        icon_path = str(self.plugin_dir / 'icons' / 'icon.png')
+        icon_path = str(self.plugin_dir / "icons" / "icon.png")
         self.add_action(
             icon_path,
-            text=self.tr('Create Timelapse'),
+            text=self.tr("Create Timelapse"),
             callback=self.run,
             parent=self.iface.mainWindow(),
-            status_tip=self.tr('Create timelapse animations from satellite imagery')
+            status_tip=self.tr("Create timelapse animations from satellite imagery"),
         )
 
     def unload(self):
         """Remove the plugin menu items and icons from QGIS GUI."""
         for action in self.actions:
-            self.iface.removePluginRasterMenu(self.tr('&Timelapse'), action)
+            self.iface.removePluginRasterMenu(self.tr("&Timelapse"), action)
             self.iface.removeToolBarIcon(action)
-        
+
         # Remove dock widget if it exists
         if self.dock_widget is not None:
             self.iface.removeDockWidget(self.dock_widget)
             self.dock_widget = None
-        
+
         del self.toolbar
 
     def run(self):
@@ -138,7 +138,7 @@ class TimelapsePlugin:
                 self.dock_widget.hide()
             else:
                 self.dock_widget.show()
-    
+
     def on_dock_closed(self):
         """Handle dock widget close event."""
         # Keep the reference but allow it to be shown again
