@@ -1,2 +1,249 @@
-# qgis-timealpse-plugin
-A QGIS plugin for creating timelapse animations from remote sensing imagery with Google Earth Engine
+# QGIS Timelapse Animation Creator
+
+A QGIS plugin for creating timelapse animations from satellite and aerial imagery using Google Earth Engine. Supports NAIP, Sentinel-2, and Sentinel-1 imagery.
+
+![QGIS Version](https://img.shields.io/badge/QGIS-3.22+-green.svg)
+![License](https://img.shields.io/badge/License-MIT-blue.svg)
+
+## Features
+
+- **Multiple Imagery Sources**:
+  - **NAIP**: US National Agriculture Imagery Program (2003-present)
+  - **Sentinel-2**: ESA optical satellite imagery (2015-present)
+  - **Sentinel-1**: ESA SAR satellite imagery (2015-present)
+
+- **Flexible Area of Interest Selection**:
+  - Draw a bounding box directly on the map
+  - Use the current map extent
+  - Use the extent of a loaded vector layer
+
+- **Customizable Output**:
+  - GIF animations with adjustable dimensions and frame rate
+  - Optional MP4 video export (requires ffmpeg)
+  - Date text overlay with customizable font and color
+  - Progress bar visualization
+  - Configurable loop settings
+
+- **Advanced Options**:
+  - Cloud masking for Sentinel-2
+  - Orbit selection for Sentinel-1 (ascending/descending)
+  - Multiple band combinations
+  - Adjustable temporal range and step size
+
+## Installation
+
+### Prerequisites
+
+1. **QGIS 3.22 or higher**
+2. **Google Earth Engine Account**: Sign up at [earthengine.google.com](https://earthengine.google.com/)
+3. **Python Dependencies**:
+   ```bash
+   pip install earthengine-api Pillow
+   ```
+
+### Installing the Plugin
+
+#### Method 1: From ZIP File
+
+1. Download this repository as a ZIP file
+2. In QGIS, go to `Plugins` → `Manage and Install Plugins`
+3. Click `Install from ZIP` and select the downloaded file
+4. Enable the plugin in the `Installed` tab
+
+#### Method 2: Manual Installation
+
+1. Clone or download this repository
+2. Copy the `qgis-timelapse-plugin` folder to your QGIS plugins directory:
+   - **Linux**: `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
+   - **Windows**: `C:\Users\<username>\AppData\Roaming\QGIS\QGIS3\profiles\default\python\plugins\`
+   - **macOS**: `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+3. Restart QGIS and enable the plugin
+
+## Usage
+
+### Quick Start
+
+1. Click the **Timelapse Animation** button in the toolbar or go to `Raster` → `Timelapse Animation` → `Create Timelapse Animation`
+
+2. **Define Area of Interest**:
+   - Choose a method (draw on map, use map extent, or use vector layer)
+   - For drawing: Click the "Draw Bounding Box" button, then click and drag on the map
+
+3. **Configure Imagery Settings**:
+   - Select imagery type (NAIP, Sentinel-2, or Sentinel-1)
+   - Set the date range (start year to end year)
+   - Adjust imagery-specific options (bands, cloud filtering, etc.)
+
+4. **Set Output Options**:
+   - Choose output file path
+   - Set animation dimensions and frame rate
+   - Enable MP4 conversion if needed
+
+5. Click **Create Timelapse** and wait for processing to complete
+
+### Detailed Settings
+
+#### Area of Interest Tab
+
+| Setting | Description |
+|---------|-------------|
+| Method | How to define the area of interest |
+| Draw Bounding Box | Click to start drawing on the map |
+| Vector Layer | Select a loaded vector layer to use its extent |
+| Extent Coordinates | Manually enter coordinates (WGS84) |
+| GEE Project ID | Optional Google Earth Engine project ID |
+
+#### Imagery Settings Tab
+
+| Setting | Description |
+|---------|-------------|
+| Imagery Type | NAIP, Sentinel-2, or Sentinel-1 |
+| Start/End Year | Temporal range for the timelapse |
+| Start/End Date | Seasonal filter (MM-dd format) |
+| Year Step | Interval between frames |
+| Band Combination | Visualization bands (Sentinel-2) |
+| Max Cloud % | Cloud coverage threshold (Sentinel-2) |
+| Polarization | VV, VH, or both (Sentinel-1) |
+| Orbit | Ascending and/or descending (Sentinel-1) |
+
+#### Output Settings Tab
+
+| Setting | Description |
+|---------|-------------|
+| Output Path | File path for the GIF animation |
+| Create MP4 | Also export as MP4 video |
+| Dimensions | Output image size in pixels |
+| Frames per Second | Animation speed |
+| Loop Count | Number of animation loops (0 = infinite) |
+| CRS | Coordinate reference system for output |
+
+#### Visualization Tab
+
+| Setting | Description |
+|---------|-------------|
+| Add Date Text | Show date on each frame |
+| Font Size/Color | Text styling options |
+| Add Progress Bar | Show animation progress |
+| Bar Height/Color | Progress bar styling |
+| Title | Optional title text |
+
+## Examples
+
+### NAIP Timelapse (US Only)
+
+```
+Imagery Type: NAIP
+Start Year: 2010
+End Year: 2023
+Year Step: 2
+```
+
+NAIP provides high-resolution (1m) aerial imagery for the United States. Images are typically captured during the agricultural growing season.
+
+### Sentinel-2 False Color Timelapse
+
+```
+Imagery Type: Sentinel-2
+Start Year: 2018
+End Year: 2024
+Start Date: 06-01
+End Date: 09-30
+Bands: NIR, Red, Green (False Color)
+Max Cloud: 20%
+Apply Cloud Masking: Yes
+```
+
+This configuration creates a summer timelapse with vegetation highlighted in red.
+
+### Sentinel-1 SAR Timelapse
+
+```
+Imagery Type: Sentinel-1
+Start Year: 2018
+End Year: 2024
+Polarization: VV
+Orbit: Both Ascending and Descending
+```
+
+SAR imagery is useful for monitoring changes regardless of cloud cover or lighting conditions.
+
+## Google Earth Engine Authentication
+
+On first use, you'll need to authenticate with Google Earth Engine:
+
+1. When prompted, a browser window will open
+2. Sign in with your Google account that has Earth Engine access
+3. Copy the authorization code and paste it in the terminal
+4. Authentication credentials are saved for future use
+
+Alternatively, authenticate beforehand using the command line:
+
+```bash
+earthengine authenticate
+```
+
+## Troubleshooting
+
+### Common Issues
+
+**"Failed to initialize Google Earth Engine"**
+- Ensure you have an active Earth Engine account
+- Try running `earthengine authenticate` in the terminal
+- Check your internet connection
+
+**"No images found"**
+- Verify the area of interest is within the imagery coverage
+- For NAIP: Only covers the United States
+- For Sentinel: Expand the date range
+- Check that coordinates are in WGS84 format
+
+**"Module not found" errors**
+- Install required dependencies: `pip install earthengine-api Pillow`
+- Ensure you're using QGIS's Python environment
+
+**MP4 not created**
+- Install ffmpeg: `sudo apt install ffmpeg` (Linux) or download from ffmpeg.org
+
+### Performance Tips
+
+- Start with smaller areas for testing
+- Use lower dimensions (512-768px) for faster processing
+- Limit the date range initially
+- Higher cloud percentage thresholds reduce processing time
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Based on the [geemap](https://github.com/gee-community/geemap) timelapse module by Qiusheng Wu
+- Uses [Google Earth Engine](https://earthengine.google.com/) for satellite imagery processing
+- Built with [QGIS](https://qgis.org/) and PyQt
+
+## Citation
+
+If you use this plugin in your research, please cite:
+
+```bibtex
+@software{qgis_timelapse_plugin,
+  author = {Qiusheng Wu},
+  title = {QGIS Timelapse Animation Creator},
+  year = {2024},
+  url = {https://github.com/giswqs/qgis-timelapse-plugin}
+}
+```
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/giswqs/qgis-timelapse-plugin/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/giswqs/qgis-timelapse-plugin/discussions)
