@@ -244,8 +244,8 @@ class TimelapsePlugin:
 
 <h3>Links:</h3>
 <ul>
-<li><a href="https://github.com/giswqs/qgis-timelapse-plugin">GitHub Repository</a></li>
-<li><a href="https://github.com/giswqs/qgis-timelapse-plugin/issues">Report Issues</a></li>
+<li><a href="https://github.com/opengeos/qgis-timelapse-plugin">GitHub Repository</a></li>
+<li><a href="https://github.com/opengeos/qgis-timelapse-plugin/issues">Report Issues</a></li>
 </ul>
 
 <p>Licensed under MIT License</p>

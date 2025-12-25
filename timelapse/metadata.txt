@@ -20,9 +20,9 @@ about=A QGIS plugin for creating timelapse animations from remote sensing imager
     - GIF and MP4 output formats
     - Plugin update checker with automatic installation
 
-tracker=https://github.com/giswqs/qgis-timelapse-plugin/issues
-repository=https://github.com/giswqs/qgis-timelapse-plugin
-homepage=https://github.com/giswqs/qgis-timelapse-plugin
+tracker=https://github.com/opengeos/qgis-timelapse-plugin/issues
+repository=https://github.com/opengeos/qgis-timelapse-plugin
+homepage=https://github.com/opengeos/qgis-timelapse-plugin
 
 tags=earth engine, timelapse, animation, satellite, sentinel, naip, landsat, modis, goes, remote sensing, gif
 
