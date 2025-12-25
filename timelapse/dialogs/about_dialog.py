@@ -66,7 +66,9 @@ class AboutDialog(QDialog):
             icon_label = QLabel()
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
-                icon_label.setPixmap(pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                icon_label.setPixmap(
+                    pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                )
                 header_layout.addWidget(icon_label)
 
         # Title and version
@@ -89,10 +91,10 @@ class AboutDialog(QDialog):
 
         # Description
         desc_text = """
-<p>A QGIS plugin for creating timelapse animations from satellite and aerial imagery 
+<p>A QGIS plugin for creating timelapse animations from satellite and aerial imagery
 using Google Earth Engine.</p>
 
-<p>Create stunning timelapse animations showing environmental changes, urban development, 
+<p>Create stunning timelapse animations showing environmental changes, urban development,
 seasonal variations, and more from various satellite data sources.</p>
 """
         desc_label = QLabel(desc_text)
@@ -143,11 +145,13 @@ seasonal variations, and more from various satellite data sources.</p>
         author_group = QGroupBox("Author")
         author_layout = QVBoxLayout(author_group)
 
-        author_info = QLabel("""
+        author_info = QLabel(
+            """
 <p><b>Qiusheng Wu</b></p>
 <p>Email: <a href="mailto:giswqs@gmail.com">giswqs@gmail.com</a></p>
 <p>Website: <a href="https://wetlands.io">https://wetlands.io</a></p>
-""")
+"""
+        )
         author_info.setOpenExternalLinks(True)
         author_layout.addWidget(author_info)
         layout.addWidget(author_group)
@@ -187,17 +191,25 @@ seasonal variations, and more from various satellite data sources.</p>
         """Open GitHub repository in browser."""
         from qgis.PyQt.QtCore import QUrl
         from qgis.PyQt.QtGui import QDesktopServices
-        QDesktopServices.openUrl(QUrl("https://github.com/giswqs/qgis-timelapse-plugin"))
+
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/giswqs/qgis-timelapse-plugin")
+        )
 
     def _open_issues(self):
         """Open GitHub issues page in browser."""
         from qgis.PyQt.QtCore import QUrl
         from qgis.PyQt.QtGui import QDesktopServices
-        QDesktopServices.openUrl(QUrl("https://github.com/giswqs/qgis-timelapse-plugin/issues"))
+
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/giswqs/qgis-timelapse-plugin/issues")
+        )
 
     def _open_docs(self):
         """Open documentation in browser."""
         from qgis.PyQt.QtCore import QUrl
         from qgis.PyQt.QtGui import QDesktopServices
-        QDesktopServices.openUrl(QUrl("https://github.com/giswqs/qgis-timelapse-plugin#readme"))
 
+        QDesktopServices.openUrl(
+            QUrl("https://github.com/giswqs/qgis-timelapse-plugin#readme")
+        )

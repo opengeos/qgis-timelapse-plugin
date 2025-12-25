@@ -227,7 +227,7 @@ def verify_zip(zip_path: Path) -> None:
             f"{PLUGIN_NAME}/__init__.py",
             f"{PLUGIN_NAME}/timelapse_plugin.py",
         ]
-        
+
         names = zipf.namelist()
         for required in required_files:
             if required in names:
@@ -317,4 +317,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

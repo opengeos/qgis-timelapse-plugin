@@ -290,4 +290,3 @@ class TimelapsePlugin:
         except (FileNotFoundError, OSError, IOError):
             pass
         return "Unknown"
-

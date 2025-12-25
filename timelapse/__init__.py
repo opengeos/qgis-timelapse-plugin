@@ -19,4 +19,3 @@ def classFactory(iface):
         TimelapsePlugin: The plugin instance.
     """
     return TimelapsePlugin(iface)
-

@@ -34,4 +34,3 @@ __all__ = [
     "create_modis_ndvi_timelapse",
     "create_goes_timelapse",
 ]
-

@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Script to package the Timelapse plugin for distribution
-# 
+#
 # This script is deprecated. Please use package_plugin.py instead:
 #   python package_plugin.py
 #

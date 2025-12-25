@@ -493,4 +493,3 @@ class UpdateCheckerDialog(QDialog):
             self.download_worker.wait()
 
         event.accept()
-

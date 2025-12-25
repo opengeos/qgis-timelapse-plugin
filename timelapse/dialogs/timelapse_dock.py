@@ -1266,4 +1266,3 @@ class TimelapseDockWidget(QDockWidget):
 
 # Backward compatibility alias
 TimelapseDialog = TimelapseDockWidget
-
