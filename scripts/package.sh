@@ -1,41 +1,61 @@
 #!/bin/bash
-# Script to package the plugin for distribution
+#
+# Script to package the Timelapse plugin for distribution
+# 
+# This script is deprecated. Please use package_plugin.py instead:
+#   python package_plugin.py
+#
+# Usage: ./package.sh
+#
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR/.."
+
+echo "Note: This script is deprecated. Consider using package_plugin.py instead."
+echo ""
 
 PLUGIN_NAME="timelapse"
-VERSION=$(grep "version=" ../metadata.txt | cut -d'=' -f2)
+PLUGIN_DIR="${SCRIPT_DIR}/../${PLUGIN_NAME}"
+
+# Get version from metadata
+VERSION=$(grep "version=" "${PLUGIN_DIR}/metadata.txt" | cut -d'=' -f2)
+
+if [[ -z "$VERSION" ]]; then
+    echo "❌ Could not determine version from metadata.txt"
+    exit 1
+fi
+
+echo "Packaging ${PLUGIN_NAME} version ${VERSION}..."
 
 # Create output directory
-mkdir -p ../dist
+mkdir -p dist
 
 # Create temp directory
 TEMP_DIR=$(mktemp -d)
-PLUGIN_DIR="$TEMP_DIR/$PLUGIN_NAME"
+DEST_DIR="$TEMP_DIR/$PLUGIN_NAME"
 
 # Copy plugin files
-mkdir -p "$PLUGIN_DIR"
-mkdir -p "$PLUGIN_DIR/icons"
+cp -r "$PLUGIN_DIR" "$DEST_DIR"
 
-cp ../__init__.py "$PLUGIN_DIR/"
-cp ../metadata.txt "$PLUGIN_DIR/"
-cp ../timelapse_plugin.py "$PLUGIN_DIR/"
-cp ../timelapse_dialog.py "$PLUGIN_DIR/"
-cp ../timelapse_core.py "$PLUGIN_DIR/"
-cp ../icons/icon.png "$PLUGIN_DIR/icons/"
-cp ../icons/icon.svg "$PLUGIN_DIR/icons/"
-cp ../resources.qrc "$PLUGIN_DIR/"
-cp ../requirements.txt "$PLUGIN_DIR/"
-cp ../install.py "$PLUGIN_DIR/"
-cp ../LICENSE "$PLUGIN_DIR/"
-cp ../README.md "$PLUGIN_DIR/"
+# Remove unwanted files
+find "$DEST_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$DEST_DIR" -name "*.pyc" -delete 2>/dev/null || true
+find "$DEST_DIR" -name "*.pyo" -delete 2>/dev/null || true
+find "$DEST_DIR" -name ".DS_Store" -delete 2>/dev/null || true
+find "$DEST_DIR" -name ".git*" -delete 2>/dev/null || true
 
 # Create zip file
 cd "$TEMP_DIR"
 zip -r "${PLUGIN_NAME}-${VERSION}.zip" "$PLUGIN_NAME"
 
 # Move to output directory
-mv "${PLUGIN_NAME}-${VERSION}.zip" "$(dirname "$0")/../dist/"
+mv "${PLUGIN_NAME}-${VERSION}.zip" "${SCRIPT_DIR}/../dist/"
 
 # Cleanup
 rm -rf "$TEMP_DIR"
 
-echo "Plugin packaged: dist/${PLUGIN_NAME}-${VERSION}.zip"
+echo ""
+echo "✅ Plugin packaged: dist/${PLUGIN_NAME}-${VERSION}.zip"
+echo ""

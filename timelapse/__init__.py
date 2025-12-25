@@ -2,8 +2,11 @@
 QGIS Timelapse Animation Creator Plugin
 
 This plugin allows users to create timelapse animations from satellite
-and aerial imagery (NAIP, Sentinel-2, Sentinel-1) using Google Earth Engine.
+and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, MODIS)
+using Google Earth Engine.
 """
+
+from .timelapse_plugin import TimelapsePlugin
 
 
 def classFactory(iface):
@@ -15,6 +18,5 @@ def classFactory(iface):
     Returns:
         TimelapsePlugin: The plugin instance.
     """
-    from .timelapse_plugin import TimelapsePlugin
-
     return TimelapsePlugin(iface)
+

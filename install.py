@@ -27,19 +27,6 @@ from pathlib import Path
 
 
 PLUGIN_NAME = "timelapse"
-PLUGIN_FILES = [
-    "__init__.py",
-    "metadata.txt",
-    "timelapse_plugin.py",
-    "timelapse_dialog.py",
-    "timelapse_core.py",
-    "resources.qrc",
-    "requirements.txt",
-]
-
-PLUGIN_DIRS = [
-    "icons",
-]
 
 
 def get_qgis_plugins_path(profile: str = "default", custom_path: str = None) -> Path:
@@ -137,6 +124,16 @@ def get_script_directory() -> Path:
     return Path(__file__).parent.resolve()
 
 
+def get_plugin_source_directory() -> Path:
+    """Get the source directory containing the plugin files."""
+    script_dir = get_script_directory()
+    plugin_dir = script_dir / PLUGIN_NAME
+    if plugin_dir.exists() and plugin_dir.is_dir():
+        return plugin_dir
+    # Fallback to script directory if plugin folder doesn't exist
+    return script_dir
+
+
 def install_dependencies(use_pip: bool = True) -> bool:
     """
     Install Python dependencies.
@@ -213,41 +210,28 @@ def install_plugin(plugins_dir: Path, source_dir: Path) -> bool:
             print(f"❌ Permission denied removing: {plugin_dest}")
             return False
 
-    # Create plugin directory
-    plugin_dest.mkdir(parents=True, exist_ok=True)
+    # Copy entire plugin directory
+    try:
+        shutil.copytree(
+            source_dir,
+            plugin_dest,
+            ignore=shutil.ignore_patterns(
+                "__pycache__",
+                "*.pyc",
+                "*.pyo",
+                ".git",
+                ".gitignore",
+                ".DS_Store",
+            ),
+        )
+        print(f"   ✓ Copied plugin files")
+    except Exception as e:
+        print(f"   ✗ Failed to copy plugin: {e}")
+        return False
 
-    # Copy plugin files
-    copied = 0
-    for file_name in PLUGIN_FILES:
-        source_file = source_dir / file_name
-        dest_file = plugin_dest / file_name
-
-        if source_file.exists():
-            try:
-                shutil.copy2(source_file, dest_file)
-                copied += 1
-                print(f"   ✓ {file_name}")
-            except Exception as e:
-                print(f"   ✗ {file_name}: {e}")
-        else:
-            print(f"   ⚠ {file_name} not found (skipped)")
-
-    # Copy plugin directories
-    for dir_name in PLUGIN_DIRS:
-        source_subdir = source_dir / dir_name
-        dest_subdir = plugin_dest / dir_name
-
-        if source_subdir.exists() and source_subdir.is_dir():
-            try:
-                if dest_subdir.exists():
-                    shutil.rmtree(dest_subdir)
-                shutil.copytree(source_subdir, dest_subdir)
-                copied += 1
-                print(f"   ✓ {dir_name}/")
-            except Exception as e:
-                print(f"   ✗ {dir_name}/: {e}")
-
-    print(f"\n✅ Installed {copied} items successfully")
+    # Count copied files
+    copied = sum(1 for _ in plugin_dest.rglob("*") if _.is_file())
+    print(f"\n✅ Installed {copied} files successfully")
     return True
 
 
@@ -304,7 +288,7 @@ Next steps:
 
 4. Access the plugin:
    - Click the Timelapse icon in the toolbar, OR
-   - Go to: Raster → Timelapse Animation → Create Timelapse Animation
+   - Go to: Timelapse menu → Create Timelapse
 
 For help and documentation, see:
 https://github.com/giswqs/qgis-timelapse-plugin
@@ -353,7 +337,7 @@ Examples:
     print(f"🐍 Python: {sys.version.split()[0]}")
 
     # Get paths
-    source_dir = get_script_directory()
+    source_dir = get_plugin_source_directory()
     print(f"📁 Source: {source_dir}")
 
     try:

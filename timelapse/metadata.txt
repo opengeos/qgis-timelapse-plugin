@@ -1,0 +1,49 @@
+[general]
+name=Timelapse
+qgisMinimumVersion=3.22
+description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
+version=1.0.0
+author=Qiusheng Wu
+email=giswqs@gmail.com
+
+about=A QGIS plugin for creating timelapse animations from remote sensing imagery using Google Earth Engine.
+
+    Features:
+    - NAIP timelapse: High-resolution aerial imagery (US only, 2003-present)
+    - Landsat timelapse: Long-term satellite archive (1984-present)
+    - Sentinel-2 timelapse: Multispectral satellite imagery (2015-present)
+    - Sentinel-1 timelapse: SAR radar imagery (2014-present)
+    - MODIS NDVI: Vegetation phenology animations
+    - GOES: Weather satellite animations
+    - Define area of interest by drawing on map or using vector layers
+    - Customizable output settings (dimensions, FPS, text overlays)
+    - GIF and MP4 output formats
+    - Plugin update checker with automatic installation
+
+tracker=https://github.com/giswqs/qgis-timelapse-plugin/issues
+repository=https://github.com/giswqs/qgis-timelapse-plugin
+homepage=https://github.com/giswqs/qgis-timelapse-plugin
+
+tags=earth engine, timelapse, animation, satellite, sentinel, naip, landsat, modis, goes, remote sensing, gif
+
+category=Raster
+icon=icons/icon.png
+experimental=False
+deprecated=False
+
+changelog=
+    1.0.0:
+    - Initial release with reorganized plugin structure
+    - Added plugin update checker with automatic installation
+    - Added about dialog with plugin information
+    - Support for NAIP timelapse
+    - Support for Landsat timelapse (1984-present)
+    - Support for Sentinel-2 timelapse
+    - Support for Sentinel-1 timelapse
+    - Support for MODIS NDVI timelapse
+    - Support for GOES weather satellite timelapse
+    - Area of interest from map extent or vector layer
+    - GIF and MP4 output formats
+    - Customizable text overlays and progress bars
+
+
