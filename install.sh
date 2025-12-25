@@ -160,6 +160,6 @@ echo "   - Click the Timelapse icon in the toolbar, OR"
 echo "   - Go to: Timelapse menu → Create Timelapse"
 echo ""
 echo "For help and documentation, see:"
-echo "https://github.com/giswqs/qgis-timelapse-plugin"
+echo "https://github.com/opengeos/qgis-timelapse-plugin"
 echo ""
 

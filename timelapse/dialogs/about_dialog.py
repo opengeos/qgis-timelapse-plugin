@@ -193,7 +193,7 @@ seasonal variations, and more from various satellite data sources.</p>
         from qgis.PyQt.QtGui import QDesktopServices
 
         QDesktopServices.openUrl(
-            QUrl("https://github.com/giswqs/qgis-timelapse-plugin")
+            QUrl("https://github.com/opengeos/qgis-timelapse-plugin")
         )
 
     def _open_issues(self):
@@ -202,7 +202,7 @@ seasonal variations, and more from various satellite data sources.</p>
         from qgis.PyQt.QtGui import QDesktopServices
 
         QDesktopServices.openUrl(
-            QUrl("https://github.com/giswqs/qgis-timelapse-plugin/issues")
+            QUrl("https://github.com/opengeos/qgis-timelapse-plugin/issues")
         )
 
     def _open_docs(self):
@@ -211,5 +211,5 @@ seasonal variations, and more from various satellite data sources.</p>
         from qgis.PyQt.QtGui import QDesktopServices
 
         QDesktopServices.openUrl(
-            QUrl("https://github.com/giswqs/qgis-timelapse-plugin#readme")
+            QUrl("https://github.com/opengeos/qgis-timelapse-plugin#readme")
         )

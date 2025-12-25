@@ -54,21 +54,21 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
 
 **Linux/macOS:**
 ```bash
-git clone https://github.com/giswqs/qgis-timelapse-plugin.git
+git clone https://github.com/opengeos/qgis-timelapse-plugin.git
 cd qgis-timelapse-plugin
 ./install.sh --deps
 ```
 
 **Windows/Cross-platform:**
 ```bash
-git clone https://github.com/giswqs/qgis-timelapse-plugin.git
+git clone https://github.com/opengeos/qgis-timelapse-plugin.git
 cd qgis-timelapse-plugin
 python install.py --deps
 ```
 
 #### Method 2: From ZIP File
 
-1. Download the latest release ZIP from [Releases](https://github.com/giswqs/qgis-timelapse-plugin/releases)
+1. Download the latest release ZIP from [Releases](https://github.com/opengeos/qgis-timelapse-plugin/releases)
 2. In QGIS, go to `Plugins` → `Manage and Install Plugins`
 3. Click `Install from ZIP` and select the downloaded file
 4. Enable the plugin in the `Installed` tab
@@ -354,11 +354,11 @@ If you use this plugin in your research, please cite:
   author = {Qiusheng Wu},
   title = {QGIS Timelapse Animation Creator},
   year = {2024},
-  url = {https://github.com/giswqs/qgis-timelapse-plugin}
+  url = {https://github.com/opengeos/qgis-timelapse-plugin}
 }
 ```
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/giswqs/qgis-timelapse-plugin/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/giswqs/qgis-timelapse-plugin/discussions)
+- **Issues**: [GitHub Issues](https://github.com/opengeos/qgis-timelapse-plugin/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/opengeos/qgis-timelapse-plugin/discussions)

@@ -291,7 +291,7 @@ Next steps:
    - Go to: Timelapse menu → Create Timelapse
 
 For help and documentation, see:
-https://github.com/giswqs/qgis-timelapse-plugin
+https://github.com/opengeos/qgis-timelapse-plugin
 """
     )
 
