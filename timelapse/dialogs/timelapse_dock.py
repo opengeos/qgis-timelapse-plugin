@@ -1,5 +1,5 @@
 """
-Timelapse Dialog Module
+Timelapse Dock Widget Module
 
 This module provides the user interface for creating timelapse animations.
 Uses a dockable panel for better integration with QGIS.
@@ -50,7 +50,7 @@ from qgis.core import (
 )
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 
-from . import timelapse_core
+from ..core import timelapse_core
 
 
 class TimelapseWorker(QThread):
