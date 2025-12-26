@@ -41,7 +41,7 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
 
 ### Prerequisites
 
-1. **QGIS 3.22 or higher**
+1. **QGIS 3.28 or higher**
 2. **Google Earth Engine Account**: Sign up at [earthengine.google.com](https://earthengine.google.com/)
 3. **Python Dependencies**:
    ```bash
@@ -353,7 +353,7 @@ If you use this plugin in your research, please cite:
 @software{qgis_timelapse_plugin,
   author = {Qiusheng Wu},
   title = {QGIS Timelapse Animation Creator},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/opengeos/qgis-timelapse-plugin}
 }
 ```

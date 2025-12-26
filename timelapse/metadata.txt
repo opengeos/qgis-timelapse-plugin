@@ -1,8 +1,8 @@
 [general]
 name=Timelapse
-qgisMinimumVersion=3.22
+qgisMinimumVersion=3.28
 description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
-version=1.0.0
+version=0.1.0
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
@@ -32,7 +32,7 @@ experimental=False
 deprecated=False
 
 changelog=
-    1.0.0:
+    0.1.0:
     - Initial release with reorganized plugin structure
     - Added plugin update checker with automatic installation
     - Added about dialog with plugin information
