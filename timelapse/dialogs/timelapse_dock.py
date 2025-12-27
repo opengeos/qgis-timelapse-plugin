@@ -68,7 +68,7 @@ class TimelapseWorker(QThread):
     def run(self):
         """Execute the timelapse generation."""
         try:
-            imagery_type = self.params.get("imagery_type", "NAIP")
+            imagery_type = self.params.get("imagery_type", "Landsat")
 
             # Check if EE is already initialized
             if not timelapse_core.is_ee_initialized():
@@ -88,11 +88,8 @@ class TimelapseWorker(QThread):
                 bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
             )
 
-            # Common parameters
-            common_params = {
-                "roi": roi,
-                "start_year": self.params.get("start_year", 2015),
-                "end_year": self.params.get("end_year", datetime.now().year),
+            # Common visualization parameters
+            vis_params = {
                 "out_gif": self.params.get("output_path"),
                 "dimensions": self.params.get("dimensions", 768),
                 "frames_per_second": self.params.get("fps", 5),
@@ -102,95 +99,93 @@ class TimelapseWorker(QThread):
                 "add_progress_bar": self.params.get("add_progress_bar", True),
                 "progress_bar_color": self.params.get("progress_bar_color", "white"),
                 "progress_bar_height": self.params.get("progress_bar_height", 5),
+                "title": self.params.get("title"),
                 "mp4": self.params.get("create_mp4", False),
-                "step": self.params.get("step", 1),
             }
 
             if imagery_type == "NAIP":
+                # NAIP only supports annual composites, no frequency parameter
                 naip_params = {
-                    **common_params,
+                    "roi": roi,
+                    **vis_params,
+                    "start_year": self.params.get("start_year", 2010),
+                    "end_year": self.params.get("end_year", datetime.now().year),
                     "bands": self.params.get("naip_bands", ["R", "G", "B"]),
+                    "step": self.params.get("step", 1),
                 }
                 result = timelapse_core.create_naip_timelapse(**naip_params)
 
             elif imagery_type == "Sentinel-2":
                 s2_params = {
-                    **common_params,
+                    "roi": roi,
+                    **vis_params,
+                    "start_year": self.params.get("start_year", 2018),
+                    "end_year": self.params.get("end_year", datetime.now().year),
                     "start_date": self.params.get("start_date", "06-10"),
                     "end_date": self.params.get("end_date", "09-20"),
                     "bands": self.params.get("bands", ["NIR", "Red", "Green"]),
                     "apply_fmask": self.params.get("apply_fmask", True),
                     "cloud_pct": self.params.get("cloud_pct", 30),
+                    "frequency": self.params.get("frequency", "year"),
+                    "step": self.params.get("step", 1),
                 }
                 result = timelapse_core.create_sentinel2_timelapse(**s2_params)
 
             elif imagery_type == "Sentinel-1":
                 s1_params = {
-                    **common_params,
+                    "roi": roi,
+                    **vis_params,
+                    "start_year": self.params.get("start_year", 2018),
+                    "end_year": self.params.get("end_year", datetime.now().year),
                     "start_date": self.params.get("start_date", "01-01"),
                     "end_date": self.params.get("end_date", "12-31"),
                     "bands": self.params.get("s1_bands", ["VV"]),
                     "orbit": self.params.get("orbit", ["ascending", "descending"]),
+                    "frequency": self.params.get("frequency", "year"),
+                    "step": self.params.get("step", 1),
                 }
                 result = timelapse_core.create_sentinel1_timelapse(**s1_params)
 
             elif imagery_type == "Landsat":
                 landsat_params = {
-                    **common_params,
+                    "roi": roi,
+                    **vis_params,
+                    "start_year": self.params.get("start_year", 1990),
+                    "end_year": self.params.get("end_year", datetime.now().year),
                     "start_date": self.params.get("start_date", "06-10"),
                     "end_date": self.params.get("end_date", "09-20"),
                     "bands": self.params.get("landsat_bands", ["NIR", "Red", "Green"]),
                     "apply_fmask": self.params.get("apply_fmask", True),
+                    "frequency": self.params.get("frequency", "year"),
+                    "step": self.params.get("step", 1),
                 }
                 result = timelapse_core.create_landsat_timelapse(**landsat_params)
 
             elif imagery_type == "MODIS NDVI":
                 modis_params = {
                     "roi": roi,
-                    "out_gif": self.params.get("output_path"),
+                    **vis_params,
                     "data": self.params.get("modis_satellite", "Terra"),
                     "band": self.params.get("modis_band", "NDVI"),
                     "start_date": f"{self.params.get('start_year', 2010)}-01-01",
                     "end_date": f"{self.params.get('end_year', 2020)}-12-31",
-                    "dimensions": self.params.get("dimensions", 768),
-                    "frames_per_second": self.params.get("fps", 10),
-                    "add_text": self.params.get("add_text", True),
-                    "font_size": self.params.get("font_size", 20),
-                    "font_color": self.params.get("font_color", "white"),
-                    "add_progress_bar": self.params.get("add_progress_bar", True),
-                    "progress_bar_color": self.params.get(
-                        "progress_bar_color", "white"
-                    ),
-                    "progress_bar_height": self.params.get("progress_bar_height", 5),
-                    "mp4": self.params.get("create_mp4", False),
                 }
                 result = timelapse_core.create_modis_ndvi_timelapse(**modis_params)
 
             elif imagery_type == "GOES":
-                # For GOES, construct datetime from year and date fields
-                start_year = self.params.get("start_year", 2021)
-                end_year = self.params.get("end_year", 2021)
-                start_date = self.params.get("start_date", "01-01")
-                end_date = self.params.get("end_date", "01-02")
-
+                # GOES uses full datetime strings, not year/frequency
                 goes_params = {
                     "roi": roi,
-                    "out_gif": self.params.get("output_path"),
-                    "start_date": f"{start_year}-{start_date}T00:00:00",
-                    "end_date": f"{end_year}-{end_date}T23:59:59",
+                    **vis_params,
+                    "start_date": self.params.get(
+                        "goes_start_datetime", "2021-10-24T14:00:00"
+                    ),
+                    "end_date": self.params.get(
+                        "goes_end_datetime", "2021-10-25T01:00:00"
+                    ),
                     "data": self.params.get("goes_satellite", "GOES-17"),
                     "scan": self.params.get("goes_scan", "full_disk"),
-                    "dimensions": self.params.get("dimensions", 768),
                     "frames_per_second": self.params.get("fps", 10),
-                    "add_text": self.params.get("add_text", True),
-                    "font_size": self.params.get("font_size", 20),
-                    "font_color": self.params.get("font_color", "white"),
-                    "add_progress_bar": self.params.get("add_progress_bar", True),
-                    "progress_bar_color": self.params.get(
-                        "progress_bar_color", "white"
-                    ),
-                    "progress_bar_height": self.params.get("progress_bar_height", 5),
-                    "mp4": self.params.get("create_mp4", False),
                 }
                 result = timelapse_core.create_goes_timelapse(**goes_params)
 
@@ -322,6 +317,9 @@ class TimelapseDockWidget(QDockWidget):
 
         layout.addWidget(self.tabs)
 
+        # Initialize imagery options after all tabs are created
+        self.update_imagery_options()
+
         # Progress section
         progress_group = QGroupBox("Progress")
         progress_layout = QVBoxLayout()
@@ -393,7 +391,9 @@ class TimelapseDockWidget(QDockWidget):
         method_layout.addWidget(self.aoi_method)
         source_layout.addLayout(method_layout)
 
-        # Draw button
+        # Draw and Clear buttons
+        bbox_btn_layout = QHBoxLayout()
+
         self.draw_bbox_btn = QPushButton("Draw Bounding Box")
         self.draw_bbox_btn.setStyleSheet(
             """
@@ -409,7 +409,27 @@ class TimelapseDockWidget(QDockWidget):
             }
         """
         )
-        source_layout.addWidget(self.draw_bbox_btn)
+        bbox_btn_layout.addWidget(self.draw_bbox_btn)
+
+        self.clear_bbox_btn = QPushButton("Clear")
+        self.clear_bbox_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #d32f2f;
+                color: white;
+                font-weight: bold;
+                padding: 6px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background-color: #e53935;
+            }
+        """
+        )
+        self.clear_bbox_btn.setMaximumWidth(60)
+        bbox_btn_layout.addWidget(self.clear_bbox_btn)
+
+        source_layout.addLayout(bbox_btn_layout)
 
         # Vector layer selection
         vector_layout = QHBoxLayout()
@@ -475,7 +495,7 @@ class TimelapseDockWidget(QDockWidget):
 
         self.imagery_type = QComboBox()
         self.imagery_type.addItems(
-            ["NAIP", "Landsat", "Sentinel-2", "Sentinel-1", "MODIS NDVI", "GOES"]
+            ["Landsat", "Sentinel-2", "Sentinel-1", "MODIS NDVI", "GOES", "NAIP"]
         )
         self.imagery_type.setStyleSheet("font-size: 12px; padding: 4px;")
         type_layout.addWidget(self.imagery_type)
@@ -483,12 +503,15 @@ class TimelapseDockWidget(QDockWidget):
         type_group.setLayout(type_layout)
         layout.addWidget(type_group)
 
-        # Date range
-        date_group = QGroupBox("Date Range")
+        # Date range (will be hidden for GOES)
+        self.date_group = QGroupBox("Date Range")
         date_layout = QFormLayout()
         date_layout.setSpacing(4)
 
-        year_layout = QHBoxLayout()
+        # Year range widget
+        self.year_range_widget = QWidget()
+        year_layout = QHBoxLayout(self.year_range_widget)
+        year_layout.setContentsMargins(0, 0, 0, 0)
         self.start_year = QSpinBox()
         self.start_year.setRange(1984, datetime.now().year)
         self.start_year.setValue(2015)
@@ -501,10 +524,12 @@ class TimelapseDockWidget(QDockWidget):
         year_layout.addWidget(self.start_year)
         year_layout.addWidget(QLabel("To:"))
         year_layout.addWidget(self.end_year)
-        date_layout.addRow(year_layout)
+        date_layout.addRow(self.year_range_widget)
 
         # Seasonal date range
-        season_layout = QHBoxLayout()
+        self.season_widget = QWidget()
+        season_layout = QHBoxLayout(self.season_widget)
+        season_layout.setContentsMargins(0, 0, 0, 0)
         self.start_date = QLineEdit("06-10")
         self.start_date.setMaximumWidth(60)
         self.end_date = QLineEdit("09-20")
@@ -514,15 +539,40 @@ class TimelapseDockWidget(QDockWidget):
         season_layout.addWidget(QLabel("to"))
         season_layout.addWidget(self.end_date)
         season_layout.addStretch()
-        date_layout.addRow(season_layout)
+        date_layout.addRow(self.season_widget)
 
+        # Frequency selection
+        self.freq_widget = QWidget()
+        freq_layout = QHBoxLayout(self.freq_widget)
+        freq_layout.setContentsMargins(0, 0, 0, 0)
+        freq_layout.addWidget(QLabel("Frequency:"))
+        self.frequency = QComboBox()
+        self.frequency.addItems(["year", "quarter", "month", "day"])
+        self.frequency.setToolTip(
+            "Temporal frequency for compositing:\n"
+            "• year: One composite per year\n"
+            "• quarter: One composite per quarter (3 months)\n"
+            "• month: One composite per month\n"
+            "• day: Daily composites (more data intensive)"
+        )
+        freq_layout.addWidget(self.frequency)
+        freq_layout.addStretch()
+        date_layout.addRow(self.freq_widget)
+
+        # Step widget
+        self.step_widget = QWidget()
+        step_layout = QHBoxLayout(self.step_widget)
+        step_layout.setContentsMargins(0, 0, 0, 0)
+        step_layout.addWidget(QLabel("Step:"))
         self.year_step = QSpinBox()
         self.year_step.setRange(1, 10)
         self.year_step.setValue(1)
-        date_layout.addRow("Year Step:", self.year_step)
+        step_layout.addWidget(self.year_step)
+        step_layout.addStretch()
+        date_layout.addRow(self.step_widget)
 
-        date_group.setLayout(date_layout)
-        layout.addWidget(date_group)
+        self.date_group.setLayout(date_layout)
+        layout.addWidget(self.date_group)
 
         # NAIP options
         self.naip_group = QGroupBox("NAIP Options")
@@ -631,21 +681,25 @@ class TimelapseDockWidget(QDockWidget):
         goes_layout = QFormLayout()
 
         self.goes_satellite = QComboBox()
-        self.goes_satellite.addItems(["GOES-17", "GOES-16"])
+        self.goes_satellite.addItems(["GOES-18", "GOES-17", "GOES-16"])
         goes_layout.addRow("Satellite:", self.goes_satellite)
 
         self.goes_scan = QComboBox()
         self.goes_scan.addItems(["full_disk", "conus", "mesoscale"])
         goes_layout.addRow("Scan:", self.goes_scan)
 
-        # GOES uses datetime instead of year range
-        goes_layout.addRow(QLabel("Use date fields below for datetime range"))
+        # GOES uses full datetime instead of year range
+        goes_layout.addRow(QLabel("GOES uses datetime (high temporal frequency):"))
+        self.goes_start_datetime = QLineEdit("2021-10-24T14:00:00")
+        self.goes_start_datetime.setPlaceholderText("YYYY-MM-DDTHH:MM:SS")
+        goes_layout.addRow("Start:", self.goes_start_datetime)
+
+        self.goes_end_datetime = QLineEdit("2021-10-25T01:00:00")
+        self.goes_end_datetime.setPlaceholderText("YYYY-MM-DDTHH:MM:SS")
+        goes_layout.addRow("End:", self.goes_end_datetime)
 
         self.goes_group.setLayout(goes_layout)
         layout.addWidget(self.goes_group)
-
-        # Initially hide specific options based on selection
-        self.update_imagery_options()
 
         layout.addStretch()
         return widget
@@ -675,10 +729,6 @@ class TimelapseDockWidget(QDockWidget):
 
         self.create_mp4 = QCheckBox("Also create MP4 (requires ffmpeg)")
         file_layout.addWidget(self.create_mp4)
-
-        self.display_in_qgis = QCheckBox("Display result in QGIS map")
-        self.display_in_qgis.setChecked(True)
-        file_layout.addWidget(self.display_in_qgis)
 
         file_group.setLayout(file_layout)
         layout.addWidget(file_group)
@@ -782,12 +832,12 @@ class TimelapseDockWidget(QDockWidget):
         progress_group.setLayout(progress_layout)
         layout.addWidget(progress_group)
 
-        # Title
+        # Title overlay
         title_group = QGroupBox("Title")
         title_layout = QFormLayout()
 
         self.title_text = QLineEdit()
-        self.title_text.setPlaceholderText("Optional title")
+        self.title_text.setPlaceholderText("Optional title text")
         title_layout.addRow("Title:", self.title_text)
 
         title_group.setLayout(title_layout)
@@ -799,6 +849,7 @@ class TimelapseDockWidget(QDockWidget):
     def connect_signals(self):
         """Connect UI signals to slots."""
         self.draw_bbox_btn.clicked.connect(self.start_bbox_drawing)
+        self.clear_bbox_btn.clicked.connect(self.clear_bbox)
         self.use_map_extent_btn.clicked.connect(self.use_map_extent)
         self.refresh_layers_btn.clicked.connect(self.update_vector_layers)
         self.browse_btn.clicked.connect(self.browse_output)
@@ -848,6 +899,11 @@ class TimelapseDockWidget(QDockWidget):
         self.modis_group.setVisible(imagery == "MODIS NDVI")
         self.goes_group.setVisible(imagery == "GOES")
 
+        # Show/hide date range controls based on imagery type
+        # GOES uses its own datetime fields, not year range
+        is_goes = imagery == "GOES"
+        self.date_group.setVisible(not is_goes)
+
         # Update start year based on imagery
         if imagery == "NAIP":
             self.start_year.setMinimum(2003)
@@ -861,15 +917,30 @@ class TimelapseDockWidget(QDockWidget):
         elif imagery == "MODIS NDVI":
             self.start_year.setMinimum(2000)
             self.start_year.setValue(2010)
-        elif imagery == "GOES":
-            self.start_year.setMinimum(2017)
-            self.start_year.setValue(2021)
+
+        # Update output filename based on imagery type
+        self.update_output_filename(imagery)
+
+    def update_output_filename(self, imagery_type):
+        """Update output filename based on imagery type."""
+        filename_map = {
+            "Landsat": "landsat_timelapse.gif",
+            "Sentinel-2": "sentinel2_timelapse.gif",
+            "Sentinel-1": "sentinel1_timelapse.gif",
+            "MODIS NDVI": "modis_ndvi_timelapse.gif",
+            "GOES": "goes_timelapse.gif",
+            "NAIP": "naip_timelapse.gif",
+        }
+        filename = filename_map.get(imagery_type, "timelapse.gif")
+        output_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+        self.output_path.setText(os.path.join(output_dir, filename))
 
     def update_aoi_method(self):
         """Update AOI controls based on selected method."""
         method = self.aoi_method.currentIndex()
 
         self.draw_bbox_btn.setEnabled(method == 0)
+        self.clear_bbox_btn.setEnabled(method == 0)
         self.vector_layer_combo.setEnabled(method == 2)
 
         if method == 1:
@@ -893,6 +964,26 @@ class TimelapseDockWidget(QDockWidget):
         self.canvas.setMapTool(self.bbox_tool)
 
         self.log("Click and drag on the map to draw a bounding box...")
+
+    def clear_bbox(self):
+        """Clear the drawn bounding box from the map."""
+        # Reset the bbox tool's rubber band
+        if self.bbox_tool:
+            self.bbox_tool.reset()
+
+        # Clear the extent fields
+        self.xmin_edit.clear()
+        self.ymin_edit.clear()
+        self.xmax_edit.clear()
+        self.ymax_edit.clear()
+
+        # Clear stored bbox
+        self.current_bbox = None
+
+        # Refresh the canvas
+        self.canvas.refresh()
+
+        self.log("Bounding box cleared")
 
     def on_bbox_drawn(self, rect):
         """Handle bounding box drawn event."""
@@ -1087,6 +1178,7 @@ class TimelapseDockWidget(QDockWidget):
             "end_year": self.end_year.value(),
             "start_date": self.start_date.text(),
             "end_date": self.end_date.text(),
+            "frequency": self.frequency.currentText(),
             "step": self.year_step.value(),
             "output_path": self.output_path.text(),
             "dimensions": self.dimensions.value(),
@@ -1110,8 +1202,8 @@ class TimelapseDockWidget(QDockWidget):
             # GOES specific
             "goes_satellite": self.goes_satellite.currentText(),
             "goes_scan": self.goes_scan.currentText(),
-            # Display options
-            "display_in_qgis": self.display_in_qgis.isChecked(),
+            "goes_start_datetime": self.goes_start_datetime.text(),
+            "goes_end_datetime": self.goes_end_datetime.text(),
             # Visualization
             "add_text": self.add_text.isChecked(),
             "font_size": self.font_size.value(),
@@ -1119,6 +1211,7 @@ class TimelapseDockWidget(QDockWidget):
             "add_progress_bar": self.add_progress.isChecked(),
             "progress_bar_color": self.bar_color,
             "progress_bar_height": self.progress_height.value(),
+            "title": self.title_text.text() or None,
             "create_mp4": self.create_mp4.isChecked(),
         }
 
@@ -1152,66 +1245,8 @@ class TimelapseDockWidget(QDockWidget):
         if not os.path.exists(output_path):
             return
 
-        # Display in QGIS if requested
-        if params.get("display_in_qgis", False):
-            self.add_gif_to_map(output_path, params.get("bbox"))
-
         # Open the GIF file in external viewer
         QDesktopServices.openUrl(QUrl.fromLocalFile(output_path))
-
-    def add_gif_to_map(self, gif_path, bbox):
-        """Add the GIF as a raster layer georeferenced to the AOI.
-
-        Args:
-            gif_path: Path to the GIF file.
-            bbox: Bounding box dict with xmin, ymin, xmax, ymax.
-        """
-        if not bbox:
-            self.log("No bounding box available for georeferencing")
-            return
-
-        try:
-            # Create a world file (.gfw) for georeferencing
-            # World file format: pixel_x_size, rotation_x, rotation_y, pixel_y_size (negative), upper_left_x, upper_left_y
-            from PIL import Image
-
-            img = Image.open(gif_path)
-            width, height = img.size
-            img.close()
-
-            # Calculate pixel size
-            x_size = (bbox["xmax"] - bbox["xmin"]) / width
-            y_size = (bbox["ymax"] - bbox["ymin"]) / height
-
-            # Create world file
-            world_file = gif_path.replace(".gif", ".gfw")
-            with open(world_file, "w") as f:
-                f.write(f"{x_size}\n")  # Pixel X size
-                f.write("0\n")  # Rotation X
-                f.write("0\n")  # Rotation Y
-                f.write(f"{-y_size}\n")  # Pixel Y size (negative)
-                f.write(f"{bbox['xmin']}\n")  # Upper left X
-                f.write(f"{bbox['ymax']}\n")  # Upper left Y
-
-            # Add as raster layer
-            layer_name = os.path.splitext(os.path.basename(gif_path))[0]
-            layer = QgsRasterLayer(gif_path, layer_name)
-
-            if layer.isValid():
-                # Set CRS to WGS84
-                layer.setCrs(QgsCoordinateReferenceSystem("EPSG:4326"))
-                QgsProject.instance().addMapLayer(layer)
-
-                # Zoom to layer extent
-                self.canvas.setExtent(layer.extent())
-                self.canvas.refresh()
-
-                self.log(f"Added timelapse layer to map: {layer_name}")
-            else:
-                self.log("Failed to add layer to map - layer invalid")
-
-        except Exception as e:
-            self.log(f"Could not add GIF to map: {str(e)}")
 
     def on_timelapse_error(self, error_msg):
         """Handle timelapse generation error."""

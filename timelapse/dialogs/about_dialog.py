@@ -109,52 +109,45 @@ seasonal variations, and more from various satellite data sources.</p>
         features_browser = QTextBrowser()
         features_browser.setOpenExternalLinks(True)
         features_browser.setMaximumHeight(180)
+        # Use palette-aware colors for dark mode compatibility
+        features_browser.setStyleSheet(
+            """
+            QTextBrowser {
+                background-color: transparent;
+            }
+        """
+        )
         features_html = """
 <table style="width:100%; border-collapse: collapse;">
-<tr style="background-color: #f0f0f0;">
-    <td style="padding: 5px;"><b>NAIP</b></td>
-    <td style="padding: 5px;">High-resolution aerial imagery (US only, 2003-present)</td>
+<tr>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;"><b>NAIP</b></td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;">High-resolution aerial imagery (US only, 2003-present)</td>
 </tr>
 <tr>
-    <td style="padding: 5px;"><b>Landsat</b></td>
-    <td style="padding: 5px;">Long-term satellite archive (1984-present)</td>
-</tr>
-<tr style="background-color: #f0f0f0;">
-    <td style="padding: 5px;"><b>Sentinel-2</b></td>
-    <td style="padding: 5px;">Multispectral imagery (2015-present)</td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;"><b>Landsat</b></td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;">Long-term satellite archive (1984-present)</td>
 </tr>
 <tr>
-    <td style="padding: 5px;"><b>Sentinel-1</b></td>
-    <td style="padding: 5px;">SAR radar imagery (2014-present)</td>
-</tr>
-<tr style="background-color: #f0f0f0;">
-    <td style="padding: 5px;"><b>MODIS NDVI</b></td>
-    <td style="padding: 5px;">Vegetation phenology animations</td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;"><b>Sentinel-2</b></td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;">Multispectral imagery (2015-present)</td>
 </tr>
 <tr>
-    <td style="padding: 5px;"><b>GOES</b></td>
-    <td style="padding: 5px;">Weather satellite animations</td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;"><b>Sentinel-1</b></td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;">SAR radar imagery (2014-present)</td>
+</tr>
+<tr>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;"><b>MODIS NDVI</b></td>
+    <td style="padding: 8px; border-bottom: 1px solid currentColor;">Vegetation phenology animations</td>
+</tr>
+<tr>
+    <td style="padding: 8px;"><b>GOES</b></td>
+    <td style="padding: 8px;">Weather satellite animations</td>
 </tr>
 </table>
 """
         features_browser.setHtml(features_html)
         features_layout.addWidget(features_browser)
         layout.addWidget(features_group)
-
-        # Author info
-        author_group = QGroupBox("Author")
-        author_layout = QVBoxLayout(author_group)
-
-        author_info = QLabel(
-            """
-<p><b>Qiusheng Wu</b></p>
-<p>Email: <a href="mailto:giswqs@gmail.com">giswqs@gmail.com</a></p>
-<p>Website: <a href="https://wetlands.io">https://wetlands.io</a></p>
-"""
-        )
-        author_info.setOpenExternalLinks(True)
-        author_layout.addWidget(author_info)
-        layout.addWidget(author_group)
 
         # Links
         links_layout = QHBoxLayout()
