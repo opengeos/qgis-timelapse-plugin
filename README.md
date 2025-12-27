@@ -211,7 +211,7 @@ qgis-timelapse-plugin/
 #### Area of Interest Tab
 
 | Setting            | Description                                    |
-| ------------------ | ---------------------------------------------- |
+| ---------------- | ---------------------------------------------------------- |
 | Method             | How to define the area of interest             |
 | Draw Bounding Box  | Click to start drawing on the map              |
 | Vector Layer       | Select a loaded vector layer to use its extent |
