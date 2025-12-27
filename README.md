@@ -97,7 +97,7 @@ cd geo
 From the `geo` folder:
 
 ```bash
-pixi add qgis geemap pillow ffmpeg
+pixi add qgis geemap earthengine-api pillow ffmpeg
 ```
 
 #### 4) Authenticate Earth Engine
