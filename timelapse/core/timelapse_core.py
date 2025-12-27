@@ -133,6 +133,93 @@ def geojson_to_ee_geometry(geojson: dict) -> "ee.Geometry":
     return ee.Geometry(geojson)
 
 
+def date_sequence(
+    start_year: int,
+    end_year: int,
+    start_date: str,
+    end_date: str,
+    frequency: str = "year",
+    step: int = 1,
+) -> list:
+    """Generate a sequence of date ranges based on frequency.
+
+    Args:
+        start_year: Starting year.
+        end_year: Ending year.
+        start_date: Start date within year (MM-dd).
+        end_date: End date within year (MM-dd).
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
+        step: Step size.
+
+    Returns:
+        List of tuples (start_date, end_date, label) for each time period.
+    """
+    from datetime import date, timedelta
+
+    start_month = int(start_date.split("-")[0])
+    start_day = int(start_date.split("-")[1])
+    end_month = int(end_date.split("-")[0])
+    end_day = int(end_date.split("-")[1])
+
+    dates = []
+
+    if frequency == "year":
+        for year in range(start_year, end_year + 1, step):
+            start = date(year, start_month, start_day)
+            end = date(year, end_month, end_day)
+            label = str(year)
+            dates.append((start, end, label))
+
+    elif frequency == "quarter":
+        quarters = [(1, 3), (4, 6), (7, 9), (10, 12)]
+        for year in range(start_year, end_year + 1):
+            for q_idx, (q_start, q_end) in enumerate(quarters, 1):
+                # Check if quarter is within the date range
+                q_start_date = date(year, q_start, 1)
+                if q_end == 12:
+                    q_end_date = date(year, 12, 31)
+                else:
+                    q_end_date = date(year, q_end + 1, 1) - timedelta(days=1)
+
+                # Filter by start_date and end_date within year
+                year_start = date(year, start_month, start_day)
+                year_end = date(year, end_month, end_day)
+
+                # Only include quarters that overlap with the seasonal range
+                if q_end_date >= year_start and q_start_date <= year_end:
+                    label = f"{year}-Q{q_idx}"
+                    dates.append((q_start_date, q_end_date, label))
+
+    elif frequency == "month":
+        for year in range(start_year, end_year + 1):
+            for month in range(1, 13, step):
+                # Check if month is within seasonal range
+                if start_month <= end_month:
+                    if month < start_month or month > end_month:
+                        continue
+                else:  # Wraps around year end
+                    if month > end_month and month < start_month:
+                        continue
+
+                month_start = date(year, month, 1)
+                if month == 12:
+                    month_end = date(year, 12, 31)
+                else:
+                    month_end = date(year, month + 1, 1) - timedelta(days=1)
+                label = f"{year}-{month:02d}"
+                dates.append((month_start, month_end, label))
+
+    elif frequency == "day":
+        current = date(start_year, start_month, start_day)
+        end = date(end_year, end_month, end_day)
+        while current <= end:
+            label = current.strftime("%Y-%m-%d")
+            dates.append((current, current, label))
+            current += timedelta(days=step)
+
+    return dates
+
+
 def create_timeseries(
     collection: "ee.ImageCollection",
     start_date: str,
@@ -310,7 +397,7 @@ def sentinel2_timeseries(
     reducer: str = "median",
     step: int = 1,
 ) -> "ee.ImageCollection":
-    """Create Sentinel-2 time series.
+    """Create Sentinel-2 time series with configurable frequency.
 
     Args:
         roi: Region of interest.
@@ -321,7 +408,7 @@ def sentinel2_timeseries(
         bands: List of bands to include.
         apply_fmask: Whether to apply cloud masking.
         cloud_pct: Maximum cloud percentage.
-        frequency: Temporal frequency.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
         reducer: Reducer type.
         step: Step size.
 
@@ -363,15 +450,13 @@ def sentinel2_timeseries(
         )
         return image.updateMask(mask).divide(10000)
 
-    start_month = int(start_date.split("-")[0])
-    start_day = int(start_date.split("-")[1])
-    end_month = int(end_date.split("-")[0])
-    end_day = int(end_date.split("-")[1])
+    # Generate date sequence based on frequency
+    dates = date_sequence(start_year, end_year, start_date, end_date, frequency, step)
 
-    def get_annual_s2(year):
-        year = ee.Number(year)
-        start = ee.Date.fromYMD(year, start_month, start_day)
-        end = ee.Date.fromYMD(year, end_month, end_day)
+    def get_s2_composite(date_info):
+        start_dt, end_dt, label = date_info
+        start = ee.Date(start_dt.isoformat())
+        end = ee.Date(end_dt.isoformat()).advance(1, "day")
 
         collection = (
             ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -397,13 +482,13 @@ def sentinel2_timeseries(
         return composite.set(
             {
                 "system:time_start": start.millis(),
-                "system:date": start.format("YYYY"),
+                "system:date": label,
                 "empty": collection.size().eq(0),
             }
         )
 
-    years = ee.List.sequence(start_year, end_year, step)
-    result = ee.ImageCollection(years.map(get_annual_s2))
+    images = [get_s2_composite(d) for d in dates]
+    result = ee.ImageCollection(images)
 
     return result.filterMetadata("empty", "equals", 0)
 
@@ -420,7 +505,7 @@ def sentinel1_timeseries(
     reducer: str = "median",
     step: int = 1,
 ) -> "ee.ImageCollection":
-    """Create Sentinel-1 time series.
+    """Create Sentinel-1 time series with configurable frequency.
 
     Args:
         roi: Region of interest.
@@ -430,7 +515,7 @@ def sentinel1_timeseries(
         end_date: End date within year (MM-dd).
         bands: List of bands (VV, VH, HH, HV).
         orbit: Orbit direction ('ascending', 'descending', or both).
-        frequency: Temporal frequency.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
         reducer: Reducer type.
         step: Step size.
 
@@ -448,15 +533,13 @@ def sentinel1_timeseries(
     else:
         orbit = [o.upper() for o in orbit]
 
-    start_month = int(start_date.split("-")[0])
-    start_day = int(start_date.split("-")[1])
-    end_month = int(end_date.split("-")[0])
-    end_day = int(end_date.split("-")[1])
+    # Generate date sequence based on frequency
+    dates = date_sequence(start_year, end_year, start_date, end_date, frequency, step)
 
-    def get_annual_s1(year):
-        year = ee.Number(year)
-        start = ee.Date.fromYMD(year, start_month, start_day)
-        end = ee.Date.fromYMD(year, end_month, end_day)
+    def get_s1_composite(date_info):
+        start_dt, end_dt, label = date_info
+        start = ee.Date(start_dt.isoformat())
+        end = ee.Date(end_dt.isoformat()).advance(1, "day")
 
         collection = (
             ee.ImageCollection("COPERNICUS/S1_GRD")
@@ -476,13 +559,13 @@ def sentinel1_timeseries(
         return composite.set(
             {
                 "system:time_start": start.millis(),
-                "system:date": start.format("YYYY"),
+                "system:date": label,
                 "empty": collection.size().eq(0),
             }
         )
 
-    years = ee.List.sequence(start_year, end_year, step)
-    result = ee.ImageCollection(years.map(get_annual_s1))
+    images = [get_s1_composite(d) for d in dates]
+    result = ee.ImageCollection(images)
 
     return result.filterMetadata("empty", "equals", 0)
 
@@ -494,9 +577,10 @@ def landsat_timeseries(
     start_date: str = "06-10",
     end_date: str = "09-20",
     apply_fmask: bool = True,
+    frequency: str = "year",
     step: int = 1,
 ) -> "ee.ImageCollection":
-    """Create Landsat annual time series.
+    """Create Landsat time series with configurable frequency.
 
     Combines Landsat 4, 5, 7, 8, and 9 surface reflectance data
     with consistent band naming: Blue, Green, Red, NIR, SWIR1, SWIR2.
@@ -508,23 +592,14 @@ def landsat_timeseries(
         start_date: Start date within year (MM-dd).
         end_date: End date within year (MM-dd).
         apply_fmask: Whether to apply cloud/shadow masking.
-        step: Year step.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
+        step: Step size.
 
     Returns:
-        ee.ImageCollection of annual Landsat composites.
+        ee.ImageCollection of Landsat composites.
     """
     if end_year is None:
         end_year = datetime.datetime.now().year
-
-    start_month = int(start_date.split("-")[0])
-    start_day = int(start_date.split("-")[1])
-    end_month = int(end_date.split("-")[0])
-    end_day = int(end_date.split("-")[1])
-
-    # Calculate days between start and end date
-    d1 = datetime.datetime(2000, start_month, start_day)
-    d2 = datetime.datetime(2000, end_month, end_day)
-    n_days = abs((d2 - d1).days)
 
     # Landsat collections
     LC09col = ee.ImageCollection("LANDSAT/LC09/C02/T1_L2")
@@ -533,8 +608,8 @@ def landsat_timeseries(
     LT05col = ee.ImageCollection("LANDSAT/LT05/C02/T1_L2")
     LT04col = ee.ImageCollection("LANDSAT/LT04/C02/T1_L2")
 
-    def col_filter(col, roi, start_date, end_date):
-        return col.filterBounds(roi).filterDate(start_date, end_date)
+    def col_filter(col, roi, start_dt, end_dt):
+        return col.filterBounds(roi).filterDate(start_dt, end_dt)
 
     def rename_oli(img):
         """Rename OLI bands (Landsat 8, 9)."""
@@ -582,15 +657,18 @@ def landsat_timeseries(
             "bicubic"
         )
 
-    # Dummy image for missing years
+    # Dummy image for missing periods
     band_names = ee.List(["Blue", "Green", "Red", "NIR", "SWIR1", "SWIR2"])
     filler_values = ee.List.repeat(0, band_names.size())
     dummy_img = ee.Image.constant(filler_values).rename(band_names).selfMask().float()
 
-    def get_annual_comp(year):
-        year = ee.Number(year)
-        start = ee.Date.fromYMD(year, start_month, start_day)
-        end = start.advance(n_days, "day")
+    # Generate date sequence based on frequency
+    dates = date_sequence(start_year, end_year, start_date, end_date, frequency, step)
+
+    def get_composite(date_info):
+        start_dt, end_dt, label = date_info
+        start = ee.Date(start_dt.isoformat())
+        end = ee.Date(end_dt.isoformat()).advance(1, "day")
 
         # Filter and prepare each collection
         lc09 = col_filter(LC09col, roi, start, end).map(prep_oli)
@@ -611,16 +689,15 @@ def landsat_timeseries(
 
         return composite.set(
             {
-                "year": year,
                 "system:time_start": start.millis(),
-                "system:date": start.format("YYYY"),
+                "system:date": label,
                 "nBands": n_bands,
                 "empty": n_bands.eq(0),
             }
         )
 
-    years = ee.List.sequence(start_year, end_year, step)
-    result = ee.ImageCollection(years.map(get_annual_comp))
+    images = [get_composite(d) for d in dates]
+    result = ee.ImageCollection(images)
 
     return result.filterMetadata("empty", "equals", 0)
 
@@ -945,6 +1022,19 @@ def create_naip_timelapse(
             loop=loop,
         )
 
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
+            loop=loop,
+        )
+
     # Convert to MP4 if requested
     if mp4:
         out_mp4 = out_gif.replace(".gif", ".mp4")
@@ -976,6 +1066,7 @@ def create_sentinel2_timelapse(
     progress_bar_height: int = 5,
     loop: int = 0,
     mp4: bool = False,
+    frequency: str = "year",
     step: int = 1,
 ) -> str:
     """Create a timelapse from Sentinel-2 imagery.
@@ -1003,7 +1094,8 @@ def create_sentinel2_timelapse(
         progress_bar_height: Progress bar height.
         loop: Loop count.
         mp4: Whether to also create MP4.
-        step: Year step.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
+        step: Step size.
 
     Returns:
         Path to output GIF.
@@ -1044,6 +1136,7 @@ def create_sentinel2_timelapse(
         bands=bands,
         apply_fmask=apply_fmask,
         cloud_pct=cloud_pct,
+        frequency=frequency,
         step=step,
     )
 
@@ -1086,6 +1179,19 @@ def create_sentinel2_timelapse(
             loop=loop,
         )
 
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
+            loop=loop,
+        )
+
     # Convert to MP4 if requested
     if mp4:
         out_mp4 = out_gif.replace(".gif", ".mp4")
@@ -1117,6 +1223,7 @@ def create_sentinel1_timelapse(
     progress_bar_height: int = 5,
     loop: int = 0,
     mp4: bool = False,
+    frequency: str = "year",
     step: int = 1,
 ) -> str:
     """Create a timelapse from Sentinel-1 imagery.
@@ -1144,7 +1251,8 @@ def create_sentinel1_timelapse(
         progress_bar_height: Progress bar height.
         loop: Loop count.
         mp4: Whether to also create MP4.
-        step: Year step.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
+        step: Step size.
 
     Returns:
         Path to output GIF.
@@ -1182,6 +1290,7 @@ def create_sentinel1_timelapse(
         end_date,
         bands=bands,
         orbit=orbit,
+        frequency=frequency,
         step=step,
     )
 
@@ -1224,6 +1333,19 @@ def create_sentinel1_timelapse(
             loop=loop,
         )
 
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
+            loop=loop,
+        )
+
     # Convert to MP4 if requested
     if mp4:
         out_mp4 = out_gif.replace(".gif", ".mp4")
@@ -1254,6 +1376,7 @@ def create_landsat_timelapse(
     progress_bar_height: int = 5,
     loop: int = 0,
     mp4: bool = False,
+    frequency: str = "year",
     step: int = 1,
 ) -> str:
     """Create a timelapse from Landsat imagery.
@@ -1282,7 +1405,8 @@ def create_landsat_timelapse(
         progress_bar_height: Progress bar height.
         loop: Loop count.
         mp4: Whether to also create MP4.
-        step: Year step.
+        frequency: Temporal frequency ('year', 'quarter', 'month', 'day').
+        step: Step size.
 
     Returns:
         Path to output GIF.
@@ -1310,6 +1434,7 @@ def create_landsat_timelapse(
         start_date,
         end_date,
         apply_fmask=apply_fmask,
+        frequency=frequency,
         step=step,
     )
 
@@ -1349,6 +1474,19 @@ def create_landsat_timelapse(
             add_progress_bar=add_progress_bar,
             progress_bar_color=progress_bar_color,
             progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
             loop=loop,
         )
 
@@ -1414,6 +1552,7 @@ def create_modis_ndvi_timelapse(
     dimensions: int = 768,
     frames_per_second: int = 10,
     crs: str = "EPSG:3857",
+    title: str = None,
     add_text: bool = True,
     font_size: int = 20,
     font_color: str = "white",
@@ -1512,6 +1651,19 @@ def create_modis_ndvi_timelapse(
             loop=loop,
         )
 
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
+            loop=loop,
+        )
+
     if mp4:
         gif_to_mp4(out_gif, out_gif.replace(".gif", ".mp4"))
 
@@ -1530,7 +1682,7 @@ def goes_timeseries(
     Args:
         start_date: Start datetime (e.g., "2021-10-24T14:00:00").
         end_date: End datetime.
-        data: GOES satellite ("GOES-16" or "GOES-17").
+        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
         region: Region of interest.
 
@@ -1543,7 +1695,7 @@ def goes_timeseries(
         "mesoscale": "MCMIPM",
     }
 
-    satellite_num = data[-2:]  # "16" or "17"
+    satellite_num = data[-2:]  # "16", "17", "18"
     col = ee.ImageCollection(f"NOAA/GOES/{satellite_num}/{scan_types[scan.lower()]}")
 
     def apply_scale_and_offset(img):
@@ -1597,6 +1749,7 @@ def create_goes_timelapse(
     dimensions: int = 768,
     frames_per_second: int = 10,
     crs: str = None,
+    title: str = None,
     add_text: bool = True,
     font_size: int = 20,
     font_color: str = "white",
@@ -1615,7 +1768,7 @@ def create_goes_timelapse(
         out_gif: Output GIF path.
         start_date: Start datetime (e.g., "2021-10-24T14:00:00").
         end_date: End datetime.
-        data: GOES satellite ("GOES-16" or "GOES-17").
+        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
         dimensions: Output dimensions.
         frames_per_second: Animation speed.
@@ -1693,6 +1846,19 @@ def create_goes_timelapse(
             add_progress_bar=add_progress_bar,
             progress_bar_color=progress_bar_color,
             progress_bar_height=progress_bar_height,
+            loop=loop,
+        )
+
+    # Add title overlay if specified
+    if title is not None and isinstance(title, str) and title.strip():
+        add_text_to_gif(
+            out_gif,
+            out_gif,
+            title,
+            xy=("2%", "93%"),
+            font_size=font_size,
+            font_color=font_color,
+            add_progress_bar=False,
             loop=loop,
         )
 
