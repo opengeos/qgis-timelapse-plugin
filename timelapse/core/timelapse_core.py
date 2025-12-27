@@ -190,14 +190,31 @@ def date_sequence(
                 else:
                     q_end_date = date(year, q_end + 1, 1) - timedelta(days=1)
 
-                # Filter by start_date and end_date within year
-                year_start = date(year, start_month, start_day)
-                year_end = date(year, end_month, end_day)
+                # Build seasonal date ranges for this year.
+                # For non-wrapping seasons (start_month <= end_month), the range is
+                # fully contained within the same calendar year.
+                # For wrapping seasons (start_month > end_month), the range spans
+                # across the year boundary. In that case, quarters in a given year
+                # can overlap either the late-year portion (year, start_month..Dec)
+                # or the early-year portion (Jan..end_month in the same year).
+                if start_month <= end_month:
+                    seasonal_ranges = [
+                        (date(year, start_month, start_day), date(year, end_month, end_day))
+                    ]
+                else:
+                    seasonal_ranges = [
+                        # Season starting in the previous year and ending in this year.
+                        (date(year - 1, start_month, start_day), date(year, end_month, end_day)),
+                        # Season starting in this year and ending in the next year.
+                        (date(year, start_month, start_day), date(year + 1, end_month, end_day)),
+                    ]
 
-                # Only include quarters that overlap with the seasonal range
-                if q_end_date >= year_start and q_start_date <= year_end:
-                    label = f"{year}-Q{q_idx}"
-                    dates.append((q_start_date, q_end_date, label))
+                # Only include quarters that overlap with any of the seasonal ranges.
+                for season_start, season_end in seasonal_ranges:
+                    if q_end_date >= season_start and q_start_date <= season_end:
+                        label = f"{year}-Q{q_idx}"
+                        dates.append((q_start_date, q_end_date, label))
+                        break
 
     elif frequency == "month":
         for year in range(start_year, end_year + 1):
