@@ -358,7 +358,7 @@ The plugin includes a built-in update checker:
 
 **"Module not found" errors**
 
-- Install required dependencies: `pixi add geemap pillow ffmpeg`
+- Ensure required dependencies are installed (see the Installation section above)
 - Ensure you're using QGIS's Python environment
 
 **MP4 not created**
