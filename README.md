@@ -87,7 +87,7 @@ pixi --version
 
 Navigate to a directory where you want to create the project and run:
 
-```powershell
+```bash
 pixi init geo
 cd geo
 ```
