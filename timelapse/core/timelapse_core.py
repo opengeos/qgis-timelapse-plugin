@@ -156,11 +156,20 @@ def date_sequence(
     """
     from datetime import date, timedelta
 
-    start_month = int(start_date.split("-")[0])
-    start_day = int(start_date.split("-")[1])
-    end_month = int(end_date.split("-")[0])
-    end_day = int(end_date.split("-")[1])
+    # Validate and parse start_date and end_date in "MM-dd" format
+    try:
+        start_dt = datetime.datetime.strptime(start_date, "%m-%d")
+        end_dt = datetime.datetime.strptime(end_date, "%m-%d")
+    except (ValueError, TypeError) as exc:
+        raise ValueError(
+            "start_date and end_date must be strings in 'MM-dd' format, "
+            f"got start_date={start_date!r}, end_date={end_date!r}"
+        ) from exc
 
+    start_month = start_dt.month
+    start_day = start_dt.day
+    end_month = end_dt.month
+    end_day = end_dt.day
     dates = []
 
     if frequency == "year":
