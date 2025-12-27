@@ -177,8 +177,12 @@ class TimelapseWorker(QThread):
                 goes_params = {
                     "roi": roi,
                     **vis_params,
-                    "start_date": self.params.get("goes_start_datetime", "2021-10-24T14:00:00"),
-                    "end_date": self.params.get("goes_end_datetime", "2021-10-25T01:00:00"),
+                    "start_date": self.params.get(
+                        "goes_start_datetime", "2021-10-24T14:00:00"
+                    ),
+                    "end_date": self.params.get(
+                        "goes_end_datetime", "2021-10-25T01:00:00"
+                    ),
                     "data": self.params.get("goes_satellite", "GOES-17"),
                     "scan": self.params.get("goes_scan", "full_disk"),
                     "frames_per_second": self.params.get("fps", 10),
@@ -389,7 +393,7 @@ class TimelapseDockWidget(QDockWidget):
 
         # Draw and Clear buttons
         bbox_btn_layout = QHBoxLayout()
-        
+
         self.draw_bbox_btn = QPushButton("Draw Bounding Box")
         self.draw_bbox_btn.setStyleSheet(
             """
@@ -424,7 +428,7 @@ class TimelapseDockWidget(QDockWidget):
         )
         self.clear_bbox_btn.setMaximumWidth(60)
         bbox_btn_layout.addWidget(self.clear_bbox_btn)
-        
+
         source_layout.addLayout(bbox_btn_layout)
 
         # Vector layer selection
