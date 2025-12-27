@@ -199,14 +199,23 @@ def date_sequence(
                 # or the early-year portion (Jan..end_month in the same year).
                 if start_month <= end_month:
                     seasonal_ranges = [
-                        (date(year, start_month, start_day), date(year, end_month, end_day))
+                        (
+                            date(year, start_month, start_day),
+                            date(year, end_month, end_day),
+                        )
                     ]
                 else:
                     seasonal_ranges = [
                         # Season starting in the previous year and ending in this year.
-                        (date(year - 1, start_month, start_day), date(year, end_month, end_day)),
+                        (
+                            date(year - 1, start_month, start_day),
+                            date(year, end_month, end_day),
+                        ),
                         # Season starting in this year and ending in the next year.
-                        (date(year, start_month, start_day), date(year + 1, end_month, end_day)),
+                        (
+                            date(year, start_month, start_day),
+                            date(year + 1, end_month, end_day),
+                        ),
                     ]
 
                 # Only include quarters that overlap with any of the seasonal ranges.
