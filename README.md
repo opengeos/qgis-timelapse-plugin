@@ -1,13 +1,17 @@
 # QGIS Timelapse Animation Creator
 
-A QGIS plugin for creating timelapse animations from satellite and aerial imagery using Google Earth Engine. Supports NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, and GOES weather satellite imagery.
-
 ![QGIS Version](https://img.shields.io/badge/QGIS-3.22+-green.svg)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
+
+A QGIS plugin for creating timelapse animations from satellite and aerial imagery using Google Earth Engine. Supports NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, and GOES weather satellite imagery.
+
+
+![Timelapse Plugin](https://github.com/user-attachments/assets/d4672809-5235-43f1-8971-42d7f73e3205)
 
 ## Features
 
 - **Multiple Imagery Sources**:
+
   - **NAIP**: US National Agriculture Imagery Program (2003-present)
   - **Landsat**: Long-term satellite archive (1984-present)
   - **Sentinel-2**: ESA multispectral satellite imagery (2015-present)
@@ -16,11 +20,13 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
   - **GOES**: Weather satellite animations
 
 - **Flexible Area of Interest Selection**:
+
   - Draw a bounding box directly on the map
   - Use the current map extent
   - Use the extent of a loaded vector layer
 
 - **Customizable Output**:
+
   - GIF animations with adjustable dimensions and frame rate
   - Optional MP4 video export (requires ffmpeg)
   - Date text overlay with customizable font and color
@@ -28,6 +34,7 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
   - Configurable loop settings
 
 - **Advanced Options**:
+
   - Cloud masking for Sentinel-2 and Landsat
   - Orbit selection for Sentinel-1 (ascending/descending)
   - Multiple band combinations
@@ -43,32 +50,80 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
 
 1. **QGIS 3.28 or higher**
 2. **Google Earth Engine Account**: Sign up at [earthengine.google.com](https://earthengine.google.com/)
-3. **Python Dependencies**:
-   ```bash
-   pip install earthengine-api Pillow
-   ```
+
+### Install QGIS and Google Earth Engine
+
+#### 1) Install Pixi
+
+#### Linux/macOS (bash/zsh)
+
+```bash
+curl -fsSL https://pixi.sh/install.sh | sh
+```
+
+Close and re-open your terminal (or reload your shell) so `pixi` is on your `PATH`. Then confirm:
+
+```bash
+pixi --version
+```
+
+#### Windows (PowerShell)
+
+Open **PowerShell** (preferably as a normal user, Admin not required), then run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm -useb https://pixi.sh/install.ps1 | iex"
+```
+
+Close and re-open PowerShell, then confirm:
+
+```powershell
+pixi --version
+```
+
+---
+
+#### 2) Create a Pixi project
+
+Navigate to a directory where you want to create the project and run:
+
+```powershell
+pixi init geo
+cd geo
+```
+
+#### 3) Install the environment
+
+From the `geo` folder:
+
+```bash
+pixi add qgis geemap pillow ffmpeg
+```
+
+#### 4) Authenticate Earth Engine
+
+```bash
+pixi run earthengine authenticate
+```
 
 ### Installing the Plugin
 
-#### Method 1: Using Installation Script (Recommended)
+#### Method 1: From QGIS Plugin Manager (Recommended)
 
-**Linux/macOS:**
-```bash
-git clone https://github.com/opengeos/qgis-timelapse-plugin.git
-cd qgis-timelapse-plugin
-./install.sh --deps
-```
-
-**Windows/Cross-platform:**
-```bash
-git clone https://github.com/opengeos/qgis-timelapse-plugin.git
-cd qgis-timelapse-plugin
-python install.py --deps
-```
+1. Open QGIS using `pixi run qgis`
+2. Go to **Plugins** → **Manage and Install Plugins...**
+3. Go to the **Settings** tab
+4. Click **Add...** under "Plugin Repositories"
+5. Give a name for the repository, e.g., "OpenGeos"
+6. Enter the URL of the repository: https://qgis.gishub.org/plugins.xml
+7. Click **OK**
+8. Go to the **All** tab
+9. Search for "Timelapse"
+10. Select "Timelapse" from the list and click **Install Plugin**
 
 #### Method 2: From ZIP File
 
-1. Download the latest release ZIP from [Releases](https://github.com/opengeos/qgis-timelapse-plugin/releases)
+1. Download the latest release ZIP from <https://qgis.gishub.org>
 2. In QGIS, go to `Plugins` → `Manage and Install Plugins`
 3. Click `Install from ZIP` and select the downloaded file
 4. Enable the plugin in the `Installed` tab
@@ -121,21 +176,33 @@ qgis-timelapse-plugin/
 1. Click the **Timelapse** button in the toolbar or go to the `Timelapse` menu → `Create Timelapse`
 
 2. **Define Area of Interest** (AOI tab):
+
    - Choose a method (draw on map, use map extent, or use vector layer)
    - For drawing: Click the "Draw Bounding Box" button, then click and drag on the map
 
+    ![](https://github.com/user-attachments/assets/3ab196d8-7ad9-4f29-839e-a3869c1d79d6)
+
 3. **Configure Imagery Settings** (Imagery tab):
+
    - Select imagery type (NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, or GOES)
    - Set the date range (start year to end year)
    - Adjust imagery-specific options (bands, cloud filtering, etc.)
 
+    ![](https://github.com/user-attachments/assets/7cb9eaa2-1687-4d37-b64b-8810e680bc2a)
+
 4. **Set Output Options** (Output tab):
+
    - Choose output file path
    - Set animation dimensions and frame rate
    - Enable MP4 conversion if needed
 
+    ![](https://github.com/user-attachments/assets/df2207ce-db83-4d5e-ae08-031180730de1)
+
 5. **Customize Visualization** (Style tab):
+
    - Configure text overlay and progress bar
+
+    ![](https://github.com/user-attachments/assets/eeb9ee1c-a159-43b3-a124-41a6b486fd69)
 
 6. Click **Create Timelapse** and wait for processing to complete
 
@@ -143,47 +210,47 @@ qgis-timelapse-plugin/
 
 #### Area of Interest Tab
 
-| Setting | Description |
-|---------|-------------|
-| Method | How to define the area of interest |
-| Draw Bounding Box | Click to start drawing on the map |
-| Vector Layer | Select a loaded vector layer to use its extent |
-| Extent Coordinates | Manually enter coordinates (WGS84) |
-| GEE Project ID | Optional Google Earth Engine project ID |
+| Setting            | Description                                    |
+| ------------------ | ---------------------------------------------- |
+| Method             | How to define the area of interest             |
+| Draw Bounding Box  | Click to start drawing on the map              |
+| Vector Layer       | Select a loaded vector layer to use its extent |
+| Extent Coordinates | Manually enter coordinates (WGS84)             |
+| GEE Project ID     | Optional Google Earth Engine project ID        |
 
 #### Imagery Settings Tab
 
-| Setting | Description |
-|---------|-------------|
-| Imagery Type | NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, or GOES |
-| Start/End Year | Temporal range for the timelapse |
-| Start/End Date | Seasonal filter (MM-dd format) |
-| Year Step | Interval between frames |
-| Band Combination | Visualization bands |
-| Max Cloud % | Cloud coverage threshold (Sentinel-2) |
-| Polarization | VV, VH, or both (Sentinel-1) |
-| Orbit | Ascending and/or descending (Sentinel-1) |
+| Setting          | Description                                                |
+| ---------------- | ---------------------------------------------------------- |
+| Imagery Type     | NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, or GOES |
+| Start/End Year   | Temporal range for the timelapse                           |
+| Start/End Date   | Seasonal filter (MM-dd format)                             |
+| Year Step        | Interval between frames                                    |
+| Band Combination | Visualization bands                                        |
+| Max Cloud %      | Cloud coverage threshold (Sentinel-2)                      |
+| Polarization     | VV, VH, or both (Sentinel-1)                               |
+| Orbit            | Ascending and/or descending (Sentinel-1)                   |
 
 #### Output Settings Tab
 
-| Setting | Description |
-|---------|-------------|
-| Output Path | File path for the GIF animation |
-| Create MP4 | Also export as MP4 video |
-| Dimensions | Output image size in pixels |
-| Frames per Second | Animation speed |
-| Loop Count | Number of animation loops (0 = infinite) |
-| CRS | Coordinate reference system for output |
+| Setting           | Description                              |
+| ----------------- | ---------------------------------------- |
+| Output Path       | File path for the GIF animation          |
+| Create MP4        | Also export as MP4 video                 |
+| Dimensions        | Output image size in pixels              |
+| Frames per Second | Animation speed                          |
+| Loop Count        | Number of animation loops (0 = infinite) |
+| CRS               | Coordinate reference system for output   |
 
 #### Visualization Tab
 
-| Setting | Description |
-|---------|-------------|
-| Add Date Text | Show date on each frame |
-| Font Size/Color | Text styling options |
+| Setting          | Description             |
+| ---------------- | ----------------------- |
+| Add Date Text    | Show date on each frame |
+| Font Size/Color  | Text styling options    |
 | Add Progress Bar | Show animation progress |
-| Bar Height/Color | Progress bar styling |
-| Title | Optional title text |
+| Bar Height/Color | Progress bar styling    |
+| Title            | Optional title text     |
 
 ## Examples
 
@@ -272,41 +339,30 @@ The plugin includes a built-in update checker:
 3. If an update is found, click "Download and Install Update"
 4. Restart QGIS to apply the update
 
-## Google Earth Engine Authentication
-
-On first use, you'll need to authenticate with Google Earth Engine:
-
-1. When prompted, a browser window will open
-2. Sign in with your Google account that has Earth Engine access
-3. Copy the authorization code and paste it in the terminal
-4. Authentication credentials are saved for future use
-
-Alternatively, authenticate beforehand using the command line:
-
-```bash
-earthengine authenticate
-```
-
 ## Troubleshooting
 
 ### Common Issues
 
 **"Failed to initialize Google Earth Engine"**
+
 - Ensure you have an active Earth Engine account
 - Try running `earthengine authenticate` in the terminal
 - Check your internet connection
 
 **"No images found"**
+
 - Verify the area of interest is within the imagery coverage
 - For NAIP: Only covers the United States
 - For Sentinel: Expand the date range
 - Check that coordinates are in WGS84 format
 
 **"Module not found" errors**
-- Install required dependencies: `pip install earthengine-api Pillow`
+
+- Install required dependencies: `pixi add geemap pillow ffmpeg`
 - Ensure you're using QGIS's Python environment
 
 **MP4 not created**
+
 - Install ffmpeg: `sudo apt install ffmpeg` (Linux) or download from ffmpeg.org
 
 ### Performance Tips
