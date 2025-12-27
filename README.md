@@ -363,7 +363,7 @@ The plugin includes a built-in update checker:
 
 **MP4 not created**
 
-- Install ffmpeg: `sudo apt install ffmpeg` (Linux) or download from ffmpeg.org
+- Ensure ffmpeg is installed. If you used the Pixi setup (`pixi add geemap pillow ffmpeg`), ffmpeg should already be available. Otherwise, install it system-wide (e.g., `sudo apt install ffmpeg` on Linux or download installers from ffmpeg.org).
 
 ### Performance Tips
 
