@@ -181,7 +181,7 @@ def date_sequence(
 
     elif frequency == "quarter":
         quarters = [(1, 3), (4, 6), (7, 9), (10, 12)]
-        for year in range(start_year, end_year + 1):
+        for year in range(start_year, end_year + 1, step):
             for q_idx, (q_start, q_end) in enumerate(quarters, 1):
                 # Check if quarter is within the date range
                 q_start_date = date(year, q_start, 1)
