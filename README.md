@@ -115,7 +115,7 @@ pixi run earthengine authenticate
 3. Go to the **Settings** tab
 4. Click **Add...** under "Plugin Repositories"
 5. Give a name for the repository, e.g., "OpenGeos"
-6. Enter the URL of the repository: https://qgis.gishub.org/plugins.xml
+6. Enter the URL of the repository: <https://qgis.gishub.org/plugins.xml>
 7. Click **OK**
 8. Go to the **All** tab
 9. Search for "Timelapse"
