@@ -213,11 +213,13 @@ def vector_to_geojson(
             properties[field_name] = field_value
 
         geojson_geom = json.loads(geom.ExportToJson())
-        features.append({
-            "type": "Feature",
-            "geometry": geojson_geom,
-            "properties": properties,
-        })
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": geojson_geom,
+                "properties": properties,
+            }
+        )
 
     ds = None  # Close dataset
 
@@ -356,9 +358,11 @@ def add_overlay(
 
     # Blend overlay with each image in collection
     def blend_overlay(img):
-        return img.blend(overlay_image).set(
-            "system:time_start", img.get("system:time_start")
-        ).set("system:date", img.get("system:date"))
+        return (
+            img.blend(overlay_image)
+            .set("system:time_start", img.get("system:time_start"))
+            .set("system:date", img.get("system:date"))
+        )
 
     return collection.map(blend_overlay)
 

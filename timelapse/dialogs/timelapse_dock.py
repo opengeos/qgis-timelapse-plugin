@@ -868,9 +868,7 @@ class TimelapseDockWidget(QDockWidget):
 
         # Overlay source type
         self.overlay_source = QComboBox()
-        self.overlay_source.addItems(
-            ["Local File", "EE FeatureCollection"]
-        )
+        self.overlay_source.addItems(["Local File", "EE FeatureCollection"])
         overlay_layout.addRow("Source:", self.overlay_source)
 
         # Overlay path/ID input with browse button
@@ -1161,7 +1159,9 @@ class TimelapseDockWidget(QDockWidget):
         enabled = self.add_overlay.isChecked()
         self.overlay_source.setEnabled(enabled)
         self.overlay_path.setEnabled(enabled)
-        self.browse_overlay_btn.setEnabled(enabled and self.overlay_source.currentIndex() == 0)
+        self.browse_overlay_btn.setEnabled(
+            enabled and self.overlay_source.currentIndex() == 0
+        )
         self.overlay_color_btn.setEnabled(enabled)
         self.overlay_width.setEnabled(enabled)
 
@@ -1172,7 +1172,9 @@ class TimelapseDockWidget(QDockWidget):
         if is_local:
             self.overlay_path.setPlaceholderText("Path to vector file")
         else:
-            self.overlay_path.setPlaceholderText("ee.FeatureCollection ID (e.g., FAO/GAUL/2015/level1)")
+            self.overlay_path.setPlaceholderText(
+                "ee.FeatureCollection ID (e.g., FAO/GAUL/2015/level1)"
+            )
 
     def validate_inputs(self):
         """Validate all inputs before running."""
@@ -1314,7 +1316,9 @@ class TimelapseDockWidget(QDockWidget):
             "create_mp4": self.create_mp4.isChecked(),
             # Vector Overlay
             "add_overlay": self.add_overlay.isChecked(),
-            "overlay_source": "local" if self.overlay_source.currentIndex() == 0 else "ee",
+            "overlay_source": (
+                "local" if self.overlay_source.currentIndex() == 0 else "ee"
+            ),
             "overlay_data": self.overlay_path.text() or None,
             "overlay_color": self.overlay_color,
             "overlay_width": self.overlay_width.value(),
