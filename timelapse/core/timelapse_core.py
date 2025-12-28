@@ -133,6 +133,240 @@ def geojson_to_ee_geometry(geojson: dict) -> "ee.Geometry":
     return ee.Geometry(geojson)
 
 
+def vector_to_geojson(
+    vector_path: str,
+    bbox: Dict[str, float] = None,
+) -> dict:
+    """Convert a local vector file to GeoJSON, optionally filtering by bbox.
+
+    Args:
+        vector_path: Path to vector file (Shapefile, GeoJSON, GeoPackage, KML, etc.).
+        bbox: Optional bounding box dict with xmin, ymin, xmax, ymax (WGS84).
+
+    Returns:
+        GeoJSON dictionary.
+    """
+    import json
+
+    try:
+        from osgeo import ogr, osr
+    except ImportError:
+        raise ImportError("GDAL/OGR is required for vector file support.")
+
+    # Open the vector file
+    ds = ogr.Open(vector_path)
+    if ds is None:
+        raise ValueError(f"Could not open vector file: {vector_path}")
+
+    layer = ds.GetLayer()
+    if layer is None:
+        raise ValueError(f"Could not read layer from: {vector_path}")
+
+    # Get source CRS and create transformation to WGS84
+    source_srs = layer.GetSpatialRef()
+    target_srs = osr.SpatialReference()
+    target_srs.ImportFromEPSG(4326)
+
+    transform = None
+    if source_srs is not None and not source_srs.IsSame(target_srs):
+        # Handle axis order for GDAL 3+
+        source_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        target_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        transform = osr.CoordinateTransformation(source_srs, target_srs)
+
+    # Set spatial filter if bbox provided
+    if bbox is not None:
+        # Create bbox geometry in WGS84
+        bbox_geom = ogr.Geometry(ogr.wkbPolygon)
+        ring = ogr.Geometry(ogr.wkbLinearRing)
+        ring.AddPoint(bbox["xmin"], bbox["ymin"])
+        ring.AddPoint(bbox["xmax"], bbox["ymin"])
+        ring.AddPoint(bbox["xmax"], bbox["ymax"])
+        ring.AddPoint(bbox["xmin"], bbox["ymax"])
+        ring.AddPoint(bbox["xmin"], bbox["ymin"])
+        bbox_geom.AddGeometry(ring)
+
+        # Transform bbox to source CRS if needed
+        if transform is not None:
+            inverse_transform = osr.CoordinateTransformation(target_srs, source_srs)
+            bbox_geom.Transform(inverse_transform)
+
+        layer.SetSpatialFilter(bbox_geom)
+
+    # Build GeoJSON FeatureCollection
+    features = []
+    for feature in layer:
+        geom = feature.GetGeometryRef()
+        if geom is None:
+            continue
+
+        # Clone and transform geometry
+        geom = geom.Clone()
+        if transform is not None:
+            geom.Transform(transform)
+
+        # Get properties
+        properties = {}
+        for i in range(feature.GetFieldCount()):
+            field_name = feature.GetFieldDefnRef(i).GetName()
+            field_value = feature.GetField(i)
+            properties[field_name] = field_value
+
+        geojson_geom = json.loads(geom.ExportToJson())
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": geojson_geom,
+                "properties": properties,
+            }
+        )
+
+    ds = None  # Close dataset
+
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+    }
+
+
+def geojson_to_ee_featurecollection(
+    geojson: dict,
+    geodesic: bool = False,
+) -> "ee.FeatureCollection":
+    """Convert GeoJSON to Earth Engine FeatureCollection.
+
+    Args:
+        geojson: GeoJSON dictionary (FeatureCollection or Feature).
+        geodesic: Whether line segments should be interpreted as spherical geodesics.
+
+    Returns:
+        ee.FeatureCollection object.
+    """
+    if geojson["type"] == "FeatureCollection":
+        for feature in geojson["features"]:
+            if feature["geometry"]["type"] != "Point":
+                feature["geometry"]["geodesic"] = geodesic
+        return ee.FeatureCollection(geojson)
+    elif geojson["type"] == "Feature":
+        geojson["geometry"]["geodesic"] = geodesic
+        return ee.FeatureCollection([ee.Feature(geojson)])
+    else:
+        # Assume it's a geometry
+        return ee.FeatureCollection([ee.Feature(ee.Geometry(geojson))])
+
+
+def load_overlay_data(
+    overlay_data: str,
+    source_type: str = "local",
+    bbox: Dict[str, float] = None,
+) -> "ee.FeatureCollection":
+    """Load overlay data from local file or EE asset.
+
+    Args:
+        overlay_data: Path to local vector file or ee.FeatureCollection asset ID.
+        source_type: Either "local" or "ee".
+        bbox: Optional bounding box for filtering (xmin, ymin, xmax, ymax in WGS84).
+
+    Returns:
+        ee.FeatureCollection object.
+    """
+    if source_type == "local":
+        # Convert local file to GeoJSON, filtering by bbox
+        geojson = vector_to_geojson(overlay_data, bbox)
+        if not geojson["features"]:
+            raise ValueError("No features found intersecting the bounding box.")
+        return geojson_to_ee_featurecollection(geojson)
+    else:
+        # Load from Earth Engine asset
+        fc = ee.FeatureCollection(overlay_data)
+        # Filter by bbox if provided
+        if bbox is not None:
+            bbox_geom = bbox_to_ee_geometry(
+                bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
+            )
+            fc = fc.filterBounds(bbox_geom)
+        return fc
+
+
+def check_color(color: str) -> str:
+    """Check and normalize color to hex format.
+
+    Args:
+        color: Color string (name like 'red', hex like '#ff0000' or 'ff0000').
+
+    Returns:
+        Hex color code with # prefix.
+    """
+    if color.startswith("#"):
+        return color
+    # Common color names to hex
+    color_map = {
+        "red": "#FF0000",
+        "green": "#00FF00",
+        "blue": "#0000FF",
+        "black": "#000000",
+        "white": "#FFFFFF",
+        "yellow": "#FFFF00",
+        "cyan": "#00FFFF",
+        "magenta": "#FF00FF",
+        "orange": "#FFA500",
+        "purple": "#800080",
+        "pink": "#FFC0CB",
+        "brown": "#A52A2A",
+        "gray": "#808080",
+        "grey": "#808080",
+    }
+    if color.lower() in color_map:
+        return color_map[color.lower()]
+    # Assume it's a hex without #
+    if len(color) == 6:
+        return f"#{color}"
+    return color
+
+
+def add_overlay(
+    collection: "ee.ImageCollection",
+    overlay_data: "ee.FeatureCollection",
+    color: str = "black",
+    width: int = 1,
+    opacity: float = 1.0,
+) -> "ee.ImageCollection":
+    """Add vector overlay to an image collection.
+
+    Args:
+        collection: The image collection to add the overlay to.
+        overlay_data: The ee.FeatureCollection to overlay.
+        color: The color of the overlay (name or hex).
+        width: The stroke width of the overlay.
+        opacity: The opacity of the overlay (0-1).
+
+    Returns:
+        ee.ImageCollection with the overlay blended onto each image.
+    """
+    # Normalize color
+    hex_color = check_color(color)
+    # Remove # for palette
+    palette_color = hex_color.lstrip("#")
+
+    # Create overlay image
+    empty = ee.Image().byte()
+    overlay_image = empty.paint(
+        featureCollection=overlay_data,
+        color=1,
+        width=width,
+    ).visualize(palette=[palette_color], opacity=opacity)
+
+    # Blend overlay with each image in collection
+    def blend_overlay(img):
+        return (
+            img.blend(overlay_image)
+            .set("system:time_start", img.get("system:time_start"))
+            .set("system:date", img.get("system:date"))
+        )
+
+    return collection.map(blend_overlay)
+
+
 def date_sequence(
     start_year: int,
     end_year: int,
@@ -973,6 +1207,9 @@ def create_naip_timelapse(
     loop: int = 0,
     mp4: bool = False,
     step: int = 1,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create a timelapse from NAIP imagery.
 
@@ -1027,6 +1264,12 @@ def create_naip_timelapse(
             }
         )
     )
+
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
 
     # Video arguments
     video_args = {
@@ -1103,6 +1346,9 @@ def create_sentinel2_timelapse(
     mp4: bool = False,
     frequency: str = "year",
     step: int = 1,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create a timelapse from Sentinel-2 imagery.
 
@@ -1185,6 +1431,12 @@ def create_sentinel2_timelapse(
         )
     )
 
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
+
     # Video arguments
     video_args = {
         "dimensions": dimensions,
@@ -1260,6 +1512,9 @@ def create_sentinel1_timelapse(
     mp4: bool = False,
     frequency: str = "year",
     step: int = 1,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create a timelapse from Sentinel-1 imagery.
 
@@ -1339,6 +1594,12 @@ def create_sentinel1_timelapse(
         )
     )
 
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
+
     # Video arguments - visualize() always creates RGB output
     video_args = {
         "dimensions": dimensions,
@@ -1413,6 +1674,9 @@ def create_landsat_timelapse(
     mp4: bool = False,
     frequency: str = "year",
     step: int = 1,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create a timelapse from Landsat imagery.
 
@@ -1482,6 +1746,12 @@ def create_landsat_timelapse(
             }
         )
     )
+
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
 
     # Video arguments
     video_args = {
@@ -1596,6 +1866,9 @@ def create_modis_ndvi_timelapse(
     progress_bar_height: int = 5,
     loop: int = 0,
     mp4: bool = False,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create MODIS NDVI/EVI timelapse showing vegetation phenology."""
     if out_gif is None:
@@ -1638,6 +1911,12 @@ def create_modis_ndvi_timelapse(
             }
         )
     )
+
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
 
     video_args = {
         "dimensions": dimensions,
@@ -1793,6 +2072,9 @@ def create_goes_timelapse(
     progress_bar_height: int = 5,
     loop: int = 0,
     mp4: bool = False,
+    overlay_data: "ee.FeatureCollection" = None,
+    overlay_color: str = "black",
+    overlay_width: int = 1,
 ) -> str:
     """Create GOES satellite timelapse.
 
@@ -1841,6 +2123,12 @@ def create_goes_timelapse(
             }
         )
     )
+
+    # Add overlay if provided
+    if overlay_data is not None:
+        vis_collection = add_overlay(
+            vis_collection, overlay_data, overlay_color, overlay_width
+        )
 
     # Use native CRS if not specified
     if crs is None:

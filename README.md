@@ -200,9 +200,9 @@ qgis-timelapse-plugin/
 
 5. **Customize Visualization** (Style tab):
 
-   - Configure text overlay and progress bar
+   - Configure text overlay, progress bar, title, and vector overlay
 
-    ![](https://github.com/user-attachments/assets/eeb9ee1c-a159-43b3-a124-41a6b486fd69)
+    ![](https://github.com/user-attachments/assets/252e2851-ee56-46b7-8edb-c5d4698133c2)
 
 6. Click **Create Timelapse** and wait for processing to complete
 

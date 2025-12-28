@@ -88,6 +88,18 @@ class TimelapseWorker(QThread):
                 bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
             )
 
+            # Load overlay data if enabled
+            overlay_data = None
+            if self.params.get("add_overlay") and self.params.get("overlay_data"):
+                self.progress.emit("Loading overlay data...")
+                overlay_source = self.params.get("overlay_source", "local")
+                overlay_path = self.params.get("overlay_data")
+                overlay_data = timelapse_core.load_overlay_data(
+                    overlay_path,
+                    source_type=overlay_source,
+                    bbox=self.params.get("bbox"),
+                )
+
             # Common visualization parameters
             vis_params = {
                 "out_gif": self.params.get("output_path"),
@@ -101,6 +113,9 @@ class TimelapseWorker(QThread):
                 "progress_bar_height": self.params.get("progress_bar_height", 5),
                 "title": self.params.get("title"),
                 "mp4": self.params.get("create_mp4", False),
+                "overlay_data": overlay_data,
+                "overlay_color": self.params.get("overlay_color", "#FF0000"),
+                "overlay_width": self.params.get("overlay_width", 2),
             }
 
             if imagery_type == "NAIP":
@@ -843,6 +858,49 @@ class TimelapseDockWidget(QDockWidget):
         title_group.setLayout(title_layout)
         layout.addWidget(title_group)
 
+        # Vector Overlay
+        overlay_group = QGroupBox("Vector Overlay")
+        overlay_layout = QFormLayout()
+
+        self.add_overlay = QCheckBox("Add Vector Overlay")
+        self.add_overlay.setChecked(False)
+        overlay_layout.addRow(self.add_overlay)
+
+        # Overlay source type
+        self.overlay_source = QComboBox()
+        self.overlay_source.addItems(["Local File", "EE FeatureCollection"])
+        overlay_layout.addRow("Source:", self.overlay_source)
+
+        # Overlay path/ID input with browse button
+        overlay_path_layout = QHBoxLayout()
+        self.overlay_path = QLineEdit()
+        self.overlay_path.setPlaceholderText("Path or ee.FeatureCollection ID")
+        overlay_path_layout.addWidget(self.overlay_path)
+
+        self.browse_overlay_btn = QPushButton("...")
+        self.browse_overlay_btn.setMaximumWidth(30)
+        overlay_path_layout.addWidget(self.browse_overlay_btn)
+        overlay_layout.addRow("Path/ID:", overlay_path_layout)
+
+        # Overlay color
+        overlay_color_layout = QHBoxLayout()
+        self.overlay_color_btn = QPushButton()
+        self.overlay_color_btn.setFixedSize(40, 24)
+        self.overlay_color = "#FF0000"  # Default red
+        self.update_color_button(self.overlay_color_btn, self.overlay_color)
+        overlay_color_layout.addWidget(self.overlay_color_btn)
+        overlay_color_layout.addStretch()
+        overlay_layout.addRow("Color:", overlay_color_layout)
+
+        # Overlay width
+        self.overlay_width = QSpinBox()
+        self.overlay_width.setRange(1, 10)
+        self.overlay_width.setValue(2)
+        overlay_layout.addRow("Width:", self.overlay_width)
+
+        overlay_group.setLayout(overlay_layout)
+        layout.addWidget(overlay_group)
+
         layout.addStretch()
         return widget
 
@@ -861,8 +919,15 @@ class TimelapseDockWidget(QDockWidget):
 
         self.font_color_btn.clicked.connect(lambda: self.pick_color("font"))
         self.bar_color_btn.clicked.connect(lambda: self.pick_color("bar"))
+        self.overlay_color_btn.clicked.connect(lambda: self.pick_color("overlay"))
+        self.browse_overlay_btn.clicked.connect(self.browse_overlay)
+        self.add_overlay.stateChanged.connect(self.update_overlay_controls)
+        self.overlay_source.currentIndexChanged.connect(self.on_overlay_source_changed)
 
         self.vector_layer_combo.currentIndexChanged.connect(self.use_layer_extent)
+
+        # Initialize overlay controls state
+        self.update_overlay_controls()
 
     def update_color_button(self, button, color_name):
         """Update a color button's appearance."""
@@ -887,6 +952,9 @@ class TimelapseDockWidget(QDockWidget):
             elif color_type == "bar":
                 self.bar_color = color_name
                 self.update_color_button(self.bar_color_btn, color_name)
+            elif color_type == "overlay":
+                self.overlay_color = color_name
+                self.update_color_button(self.overlay_color_btn, color_name)
 
     def update_imagery_options(self):
         """Show/hide imagery-specific options."""
@@ -1075,6 +1143,39 @@ class TimelapseDockWidget(QDockWidget):
                 path += ".gif"
             self.output_path.setText(path)
 
+    def browse_overlay(self):
+        """Open file browser for overlay vector file."""
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Vector File",
+            "",
+            "Vector Files (*.shp *.geojson *.json *.gpkg *.kml);;All Files (*)",
+        )
+        if path:
+            self.overlay_path.setText(path)
+
+    def update_overlay_controls(self):
+        """Enable/disable overlay controls based on checkbox state."""
+        enabled = self.add_overlay.isChecked()
+        self.overlay_source.setEnabled(enabled)
+        self.overlay_path.setEnabled(enabled)
+        self.browse_overlay_btn.setEnabled(
+            enabled and self.overlay_source.currentIndex() == 0
+        )
+        self.overlay_color_btn.setEnabled(enabled)
+        self.overlay_width.setEnabled(enabled)
+
+    def on_overlay_source_changed(self):
+        """Handle overlay source type change."""
+        is_local = self.overlay_source.currentIndex() == 0
+        self.browse_overlay_btn.setEnabled(self.add_overlay.isChecked() and is_local)
+        if is_local:
+            self.overlay_path.setPlaceholderText("Path to vector file")
+        else:
+            self.overlay_path.setPlaceholderText(
+                "ee.FeatureCollection ID (e.g., FAO/GAUL/2015/level1)"
+            )
+
     def validate_inputs(self):
         """Validate all inputs before running."""
         # Check bbox
@@ -1213,6 +1314,14 @@ class TimelapseDockWidget(QDockWidget):
             "progress_bar_height": self.progress_height.value(),
             "title": self.title_text.text() or None,
             "create_mp4": self.create_mp4.isChecked(),
+            # Vector Overlay
+            "add_overlay": self.add_overlay.isChecked(),
+            "overlay_source": (
+                "local" if self.overlay_source.currentIndex() == 0 else "ee"
+            ),
+            "overlay_data": self.overlay_path.text() or None,
+            "overlay_color": self.overlay_color,
+            "overlay_width": self.overlay_width.value(),
         }
 
         # Start worker thread
