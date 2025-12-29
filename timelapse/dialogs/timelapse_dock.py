@@ -74,6 +74,19 @@ class TimelapseWorker(QThread):
             if not timelapse_core.is_ee_initialized():
                 self.progress.emit(f"Initializing Google Earth Engine...")
                 project_id = self.params.get("gee_project", None)
+
+                # Check if project ID is provided either through UI or environment variable
+                if not project_id or not project_id.strip():
+                    env_project_id = timelapse_core.get_ee_project()
+                    if not env_project_id:
+                        self.error.emit(
+                            "Google Earth Engine Project ID is not configured. Visit https://code.earthengine.google.com to get your Project ID.\n\n"
+                            "Please either:\n"
+                            "1. Enter your GEE Project ID in the 'Google Earth Engine' section of the AOI tab, or\n"
+                            "2. Set the EE_PROJECT_ID environment variable \n"
+                        )
+                        return
+
                 if not timelapse_core.initialize_ee(project_id):
                     self.error.emit(
                         "Failed to initialize Google Earth Engine. Please authenticate first."
