@@ -83,7 +83,7 @@ class TimelapseWorker(QThread):
                             "Google Earth Engine Project ID is not configured. Visit https://code.earthengine.google.com to get your Project ID.\n\n"
                             "Please either:\n"
                             "1. Enter your GEE Project ID in the 'Google Earth Engine' section of the AOI tab, or\n"
-                            "2. Set the EE_PROJECT_ID environment variable \n"
+                            "2. Set the EE_PROJECT_ID environment variable\n"
                         )
                         return
 
