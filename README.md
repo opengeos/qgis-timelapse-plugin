@@ -44,6 +44,12 @@ A QGIS plugin for creating timelapse animations from satellite and aerial imager
   - Built-in update checker with automatic installation
   - About dialog with version info and links
 
+## Video Tutorial
+
+👉 [Watch the Earth Change: New QGIS Plugin Creates Satellite Timelapse Animations in Seconds](https://youtu.be/D_nkIL1JVU8)
+
+[![Timelapse Plugin](https://github.com/user-attachments/assets/f2839f1b-c4cf-40b4-ba6c-1914d1886c28)](https://youtu.be/D_nkIL1JVU8)
+
 ## Installation
 
 ### Prerequisites
