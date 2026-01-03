@@ -118,7 +118,7 @@ def bbox_to_ee_geometry(
     Returns:
         ee.Geometry.Rectangle object.
     """
-    return ee.Geometry.Rectangle([xmin, ymin, xmax, ymax])
+    return ee.Geometry.Rectangle([xmin, ymin, xmax, ymax], geodesic=False)
 
 
 def geojson_to_ee_geometry(geojson: dict) -> "ee.Geometry":
