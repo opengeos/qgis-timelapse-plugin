@@ -1,6 +1,6 @@
 # QGIS Timelapse Animation Creator
 
-![QGIS Version](https://img.shields.io/badge/QGIS-3.22+-green.svg)
+[![QGIS Plugin](https://img.shields.io/badge/QGIS-Plugin-green.svg)](https://plugins.qgis.org/plugins/timelapse)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 
 A QGIS plugin for creating timelapse animations from satellite and aerial imagery using Google Earth Engine. Supports NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, and GOES weather satellite imagery.
