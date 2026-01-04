@@ -95,11 +95,25 @@ class TimelapseWorker(QThread):
 
             self.progress.emit(f"Creating {imagery_type} timelapse...")
 
-            # Build ROI from bounding box
+            # Build ROI - use GeoJSON if available, otherwise use bbox
+            roi_geojson = self.params.get("roi_geojson")
             bbox = self.params.get("bbox")
-            roi = timelapse_core.bbox_to_ee_geometry(
-                bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
-            )
+
+            if roi_geojson:
+                # Convert GeoJSON FeatureCollection to EE geometry (union all features)
+                self.progress.emit("Converting vector layer boundary to EE geometry...")
+                import ee
+
+                # Convert to FeatureCollection first, then get union of all geometries
+                fc = timelapse_core.geojson_to_ee_featurecollection(
+                    roi_geojson, geodesic=False
+                )
+                roi = fc.geometry()  # This returns the dissolved union of all features
+            else:
+                # Use bounding box
+                roi = timelapse_core.bbox_to_ee_geometry(
+                    bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
+                )
 
             # Load overlay data if enabled
             overlay_data = None
@@ -297,6 +311,7 @@ class TimelapseDockWidget(QDockWidget):
         self.canvas = iface.mapCanvas()
         self.bbox_tool = None
         self.current_bbox = None
+        self.current_geojson = None  # Store GeoJSON for vector layer ROI
         self.worker = None
         self.progress_timer = None
         self.ee_initialized = False
@@ -1058,8 +1073,9 @@ class TimelapseDockWidget(QDockWidget):
         self.xmax_edit.clear()
         self.ymax_edit.clear()
 
-        # Clear stored bbox
+        # Clear stored bbox and geojson
         self.current_bbox = None
+        self.current_geojson = None
 
         # Refresh the canvas
         self.canvas.refresh()
@@ -1086,6 +1102,7 @@ class TimelapseDockWidget(QDockWidget):
             "xmax": rect_wgs84.xMaximum(),
             "ymax": rect_wgs84.yMaximum(),
         }
+        self.current_geojson = None  # Clear geojson when using bbox
 
         self.log(f"Bounding box set")
 
@@ -1109,11 +1126,12 @@ class TimelapseDockWidget(QDockWidget):
             "xmax": extent_wgs84.xMaximum(),
             "ymax": extent_wgs84.yMaximum(),
         }
+        self.current_geojson = None  # Clear geojson when using map extent
 
         self.log(f"Using map extent")
 
     def use_layer_extent(self):
-        """Use the selected layer's extent as AOI."""
+        """Use the selected layer's boundary as AOI."""
         layer_id = self.vector_layer_combo.currentData()
         if not layer_id:
             return
@@ -1122,6 +1140,7 @@ class TimelapseDockWidget(QDockWidget):
         if not layer:
             return
 
+        # Get layer extent for display in UI
         extent = layer.extent()
         source_crs = layer.crs()
         dest_crs = QgsCoordinateReferenceSystem("EPSG:4326")
@@ -1141,7 +1160,34 @@ class TimelapseDockWidget(QDockWidget):
             "ymax": extent_wgs84.yMaximum(),
         }
 
-        self.log(f"Using layer extent: {layer.name()}")
+        # Convert layer geometries to GeoJSON (WGS84)
+        import json
+
+        features = []
+        for feature in layer.getFeatures():
+            geom = feature.geometry()
+            if geom is None:
+                continue
+
+            # Clone and transform geometry to WGS84
+            geom_copy = QgsGeometry(geom)
+            if source_crs != dest_crs:
+                geom_copy.transform(transform)
+
+            # Convert to GeoJSON
+            geojson_str = geom_copy.asJson()
+            geojson_geom = json.loads(geojson_str)
+
+            features.append(
+                {"type": "Feature", "geometry": geojson_geom, "properties": {}}
+            )
+
+        if features:
+            self.current_geojson = {"type": "FeatureCollection", "features": features}
+        else:
+            self.current_geojson = None
+
+        self.log(f"Using layer boundary: {layer.name()}")
 
     def browse_output(self):
         """Open file browser for output path."""
@@ -1288,6 +1334,7 @@ class TimelapseDockWidget(QDockWidget):
         params = {
             "imagery_type": self.imagery_type.currentText(),
             "bbox": self.current_bbox,
+            "roi_geojson": self.current_geojson,  # Pass GeoJSON for vector layer ROI
             "start_year": self.start_year.value(),
             "end_year": self.end_year.value(),
             "start_date": self.start_date.text(),
