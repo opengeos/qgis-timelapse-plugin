@@ -352,8 +352,16 @@ The plugin includes a built-in update checker:
 **"Failed to initialize Google Earth Engine"**
 
 - Ensure you have an active Earth Engine account
-- Try running `earthengine authenticate` in the terminal
-- Check your internet connection
+- Log in to your Earth Engine account at <https://code.earthengine.google.com> to get your Project ID
+- Open the QGIS Python Console (QGIS -> Plugins -> Python Console) and run the following Python code to authenticate and initialize Earth Engine. Make sure to replace `your-ee-project` with your actual Earth Engine Project ID.
+
+```python
+import ee
+ee.Authenticate()
+ee.Initialize(project="your-ee-project")
+```
+
+![](https://github.com/user-attachments/assets/a7321180-1261-4c82-b545-9dbe676a864c)
 
 **"No images found"**
 
