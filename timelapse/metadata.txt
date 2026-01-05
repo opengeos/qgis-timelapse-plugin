@@ -40,7 +40,7 @@ changelog=
 
     0.2.0:
     - Add vector overlay
-    
+
     0.1.0:
     - Initial release with reorganized plugin structure
     - Added plugin update checker with automatic installation
