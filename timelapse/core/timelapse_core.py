@@ -20,7 +20,15 @@ except ImportError:
 
 try:
     from PIL import Image, ImageDraw, ImageFont
-except ImportError:
+except ImportError as e:
+    print(f"Warning: Failed to import PIL (Pillow): {e}")
+    print("Timelapse GIFs will be created without text overlays.")
+    Image = None
+    ImageDraw = None
+    ImageFont = None
+except Exception as e:
+    print(f"Error: Unexpected error importing PIL (Pillow): {e}")
+    print("Timelapse GIFs will be created without text overlays.")
     Image = None
     ImageDraw = None
     ImageFont = None
@@ -1014,6 +1022,12 @@ def make_gif(
         loop: Number of loops (0 = infinite).
         clean_up: Whether to delete source images.
     """
+    # Check if PIL is available
+    if Image is None:
+        raise RuntimeError(
+            "PIL (Pillow) is not available. Cannot create GIF from images."
+        )
+
     if isinstance(images, str) and os.path.isdir(images):
         images = list(glob.glob(os.path.join(images, f"*.{ext}")))
 
@@ -1064,6 +1078,11 @@ def add_text_to_gif(
         progress_bar_height: Progress bar height.
         loop: Loop count.
     """
+    # Check if PIL is available
+    if Image is None:
+        print("Warning: PIL (Pillow) is not available. Skipping text overlay.")
+        return
+
     gif = Image.open(in_gif)
 
     frames = []
@@ -1143,6 +1162,13 @@ def gif_to_mp4(in_gif: str, out_mp4: str) -> bool:
     """
     import subprocess
     import shutil
+
+    # Check if PIL is available
+    if Image is None:
+        print(
+            "Warning: PIL (Pillow) is not available. Cannot determine GIF dimensions for MP4 conversion."
+        )
+        return False
 
     if not shutil.which("ffmpeg"):
         return False
