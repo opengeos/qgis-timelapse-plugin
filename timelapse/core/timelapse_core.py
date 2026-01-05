@@ -1024,7 +1024,9 @@ def make_gif(
     """
     # Check if PIL is available
     if Image is None:
-        raise RuntimeError("PIL (Pillow) is not available. Cannot create GIF from images.")
+        raise RuntimeError(
+            "PIL (Pillow) is not available. Cannot create GIF from images."
+        )
 
     if isinstance(images, str) and os.path.isdir(images):
         images = list(glob.glob(os.path.join(images, f"*.{ext}")))
@@ -1163,7 +1165,9 @@ def gif_to_mp4(in_gif: str, out_mp4: str) -> bool:
 
     # Check if PIL is available
     if Image is None:
-        print("Warning: PIL (Pillow) is not available. Cannot determine GIF dimensions for MP4 conversion.")
+        print(
+            "Warning: PIL (Pillow) is not available. Cannot determine GIF dimensions for MP4 conversion."
+        )
         return False
 
     if not shutil.which("ffmpeg"):
