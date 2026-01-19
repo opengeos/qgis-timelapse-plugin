@@ -22,7 +22,6 @@ import re
 import zipfile
 from pathlib import Path
 
-
 # Plugin configuration
 PLUGIN_NAME = "timelapse"
 

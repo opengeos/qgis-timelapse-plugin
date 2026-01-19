@@ -387,8 +387,7 @@ class TimelapseDockWidget(QDockWidget):
 
         self.run_button = QPushButton("Create Timelapse")
         self.run_button.setMinimumHeight(36)
-        self.run_button.setStyleSheet(
-            """
+        self.run_button.setStyleSheet("""
             QPushButton {
                 background-color: #2e7d32;
                 color: white;
@@ -402,8 +401,7 @@ class TimelapseDockWidget(QDockWidget):
             QPushButton:disabled {
                 background-color: #9e9e9e;
             }
-        """
-        )
+        """)
 
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setMinimumHeight(36)
@@ -438,8 +436,7 @@ class TimelapseDockWidget(QDockWidget):
         bbox_btn_layout = QHBoxLayout()
 
         self.draw_bbox_btn = QPushButton("Draw Bounding Box")
-        self.draw_bbox_btn.setStyleSheet(
-            """
+        self.draw_bbox_btn.setStyleSheet("""
             QPushButton {
                 background-color: #1976d2;
                 color: white;
@@ -450,13 +447,11 @@ class TimelapseDockWidget(QDockWidget):
             QPushButton:hover {
                 background-color: #1e88e5;
             }
-        """
-        )
+        """)
         bbox_btn_layout.addWidget(self.draw_bbox_btn)
 
         self.clear_bbox_btn = QPushButton("Clear")
-        self.clear_bbox_btn.setStyleSheet(
-            """
+        self.clear_bbox_btn.setStyleSheet("""
             QPushButton {
                 background-color: #d32f2f;
                 color: white;
@@ -467,8 +462,7 @@ class TimelapseDockWidget(QDockWidget):
             QPushButton:hover {
                 background-color: #e53935;
             }
-        """
-        )
+        """)
         self.clear_bbox_btn.setMaximumWidth(60)
         bbox_btn_layout.addWidget(self.clear_bbox_btn)
 
@@ -959,15 +953,13 @@ class TimelapseDockWidget(QDockWidget):
 
     def update_color_button(self, button, color_name):
         """Update a color button's appearance."""
-        button.setStyleSheet(
-            f"""
+        button.setStyleSheet(f"""
             QPushButton {{
                 background-color: {color_name};
                 border: 2px solid #333;
                 border-radius: 3px;
             }}
-        """
-        )
+        """)
 
     def pick_color(self, color_type):
         """Open color picker dialog."""

@@ -25,7 +25,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 PLUGIN_NAME = "timelapse"
 
 
@@ -271,8 +270,7 @@ def print_post_install_instructions():
     print("\n" + "=" * 60)
     print("🎉 Installation Complete!")
     print("=" * 60)
-    print(
-        """
+    print("""
 Next steps:
 
 1. Restart QGIS if it's currently running
@@ -292,8 +290,7 @@ Next steps:
 
 For help and documentation, see:
 https://github.com/opengeos/qgis-timelapse-plugin
-"""
-    )
+""")
 
 
 def main():
