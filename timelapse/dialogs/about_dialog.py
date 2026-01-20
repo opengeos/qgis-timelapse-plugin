@@ -110,13 +110,11 @@ seasonal variations, and more from various satellite data sources.</p>
         features_browser.setOpenExternalLinks(True)
         features_browser.setMaximumHeight(180)
         # Use palette-aware colors for dark mode compatibility
-        features_browser.setStyleSheet(
-            """
+        features_browser.setStyleSheet("""
             QTextBrowser {
                 background-color: transparent;
             }
-        """
-        )
+        """)
         features_html = """
 <table style="width:100%; border-collapse: collapse;">
 <tr>
