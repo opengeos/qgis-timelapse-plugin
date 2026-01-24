@@ -286,14 +286,11 @@ def load_overlay_data(
         return geojson_to_ee_featurecollection(geojson)
     else:
         # Load from Earth Engine asset
-        fc = ee.FeatureCollection(overlay_data)
-        # Filter by bbox if provided
-        if bbox is not None:
-            bbox_geom = bbox_to_ee_geometry(
-                bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"]
-            )
-            fc = fc.filterBounds(bbox_geom)
-        return fc
+        # Strip whitespace from asset ID
+        asset_id = overlay_data.strip()
+        # Return the FeatureCollection directly without filtering
+        # The paint operation will only render what's visible in the region
+        return ee.FeatureCollection(asset_id)
 
 
 def check_color(color: str) -> str:
@@ -334,45 +331,75 @@ def check_color(color: str) -> str:
 
 def add_overlay(
     collection: "ee.ImageCollection",
-    overlay_data: "ee.FeatureCollection",
+    overlay_data,
     color: str = "black",
     width: int = 1,
     opacity: float = 1.0,
+    region: "ee.Geometry" = None,
 ) -> "ee.ImageCollection":
     """Add vector overlay to an image collection.
 
+    Adapted from geemap.timelapse.add_overlay.
+
     Args:
         collection: The image collection to add the overlay to.
-        overlay_data: The ee.FeatureCollection to overlay.
+        overlay_data: The ee.FeatureCollection, asset ID string, or ee.Geometry.
         color: The color of the overlay (name or hex).
         width: The stroke width of the overlay.
         opacity: The opacity of the overlay (0-1).
+        region: Optional region to filter the overlay by.
 
     Returns:
         ee.ImageCollection with the overlay blended onto each image.
     """
+    # Convert overlay_data to FeatureCollection if needed (same as geemap)
+    if not isinstance(overlay_data, ee.FeatureCollection):
+        if isinstance(overlay_data, str):
+            overlay_data = ee.FeatureCollection(overlay_data)
+        elif isinstance(overlay_data, ee.Feature):
+            overlay_data = ee.FeatureCollection([overlay_data])
+        elif isinstance(overlay_data, ee.Geometry):
+            overlay_data = ee.FeatureCollection([ee.Feature(overlay_data)])
+
+    # Get target projection from first image
+    target_proj = collection.first().projection()
+
+    # Filter and clip by region if provided
+    region_geom = None
+    if region is not None:
+        if isinstance(region, ee.Geometry):
+            region_geom = region
+        else:
+            region_geom = region.geometry()
+        overlay_data = overlay_data.filterBounds(region_geom).map(
+            lambda feature: feature.intersection(region_geom, ee.ErrorMargin(1))
+        )
+
     # Normalize color
     hex_color = check_color(color)
     # Remove # for palette
     palette_color = hex_color.lstrip("#")
 
-    # Create overlay image
-    empty = ee.Image().byte()
-    overlay_image = empty.paint(
+    # Create overlay image with proper projection (same as geemap)
+    empty = ee.Image().byte().setDefaultProjection(target_proj)
+    image = empty.paint(
         featureCollection=overlay_data,
         color=1,
         width=width,
     ).visualize(palette=[palette_color], opacity=opacity)
+    image = image.setDefaultProjection(target_proj)
+
+    # Clip to region if provided
+    if region_geom is not None:
+        image = image.clip(region_geom)
 
     # Blend overlay with each image in collection
-    def blend_overlay(img):
-        return (
-            img.blend(overlay_image)
-            .set("system:time_start", img.get("system:time_start"))
-            .set("system:date", img.get("system:date"))
-        )
-
-    return collection.map(blend_overlay)
+    blend_col = collection.map(
+        lambda img: img.blend(image)
+        .setDefaultProjection(img.projection())
+        .set("system:time_start", img.get("system:time_start"))
+    )
+    return blend_col
 
 
 def date_sequence(
@@ -995,11 +1022,29 @@ def download_ee_video(
         Path to output GIF.
     """
     import urllib.request
+    import urllib.error
 
-    url = collection.getVideoThumbURL(video_args)
+    try:
+        url = collection.getVideoThumbURL(video_args)
+        print(f"[DEBUG] Video URL generated successfully")
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate video URL: {e}") from e
 
     # Download the GIF
-    urllib.request.urlretrieve(url, out_gif)
+    try:
+        urllib.request.urlretrieve(url, out_gif)
+    except urllib.error.HTTPError as e:
+        # Read the error response body for more details
+        error_body = ""
+        if hasattr(e, "read"):
+            try:
+                error_body = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                pass
+        raise RuntimeError(
+            f"Failed to download video: HTTP {e.code} {e.reason}. "
+            f"Details: {error_body[:500] if error_body else 'No details'}"
+        ) from e
 
     return out_gif
 
@@ -1294,7 +1339,7 @@ def create_naip_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
 
     # Video arguments
@@ -1460,7 +1505,7 @@ def create_sentinel2_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
 
     # Video arguments
@@ -1623,7 +1668,7 @@ def create_sentinel1_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
 
     # Video arguments - visualize() always creates RGB output
@@ -1776,7 +1821,7 @@ def create_landsat_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
 
     # Video arguments
@@ -1941,7 +1986,7 @@ def create_modis_ndvi_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
 
     video_args = {
@@ -2141,9 +2186,11 @@ def create_goes_timelapse(
     bands = ["CMI_C02", "CMI_GREEN", "CMI_C01"]
     vis_params = {"bands": bands, "min": 0, "max": 0.8}
 
-    # Visualize collection
+    # Visualize collection and preserve original projection
     vis_collection = collection.select(bands).map(
-        lambda img: img.visualize(**vis_params).set(
+        lambda img: img.visualize(**vis_params)
+        .setDefaultProjection(img.projection())
+        .set(
             {
                 "system:time_start": img.get("system:time_start"),
             }
@@ -2153,8 +2200,12 @@ def create_goes_timelapse(
     # Add overlay if provided
     if overlay_data is not None:
         vis_collection = add_overlay(
-            vis_collection, overlay_data, overlay_color, overlay_width
+            vis_collection, overlay_data, overlay_color, overlay_width, region=roi
         )
+        # Force EPSG:3857 when overlay is used to avoid projection issues
+        # GOES uses geostationary projection which can't transform overlay coordinates
+        if crs is None:
+            crs = "EPSG:3857"
 
     # Use native CRS if not specified
     if crs is None:
@@ -2185,6 +2236,8 @@ def create_goes_timelapse(
             .aggregate_array("date")
             .getInfo()
         )
+
+        dates = [f"{date} UTC" for date in dates]
 
         add_text_to_gif(
             out_gif,
