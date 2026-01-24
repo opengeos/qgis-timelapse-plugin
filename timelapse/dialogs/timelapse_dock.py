@@ -726,12 +726,13 @@ class TimelapseDockWidget(QDockWidget):
         goes_layout.addRow("Scan:", self.goes_scan)
 
         # GOES uses full datetime instead of year range
+        current_date = datetime.now().strftime("%Y-%m-%d")
         goes_layout.addRow(QLabel("GOES uses datetime (high temporal frequency):"))
-        self.goes_start_datetime = QLineEdit("2021-10-24T14:00:00")
+        self.goes_start_datetime = QLineEdit(current_date + "T12:00:00")
         self.goes_start_datetime.setPlaceholderText("YYYY-MM-DDTHH:MM:SS")
         goes_layout.addRow("Start:", self.goes_start_datetime)
 
-        self.goes_end_datetime = QLineEdit("2021-10-25T01:00:00")
+        self.goes_end_datetime = QLineEdit(current_date + "T20:00:00")
         self.goes_end_datetime.setPlaceholderText("YYYY-MM-DDTHH:MM:SS")
         goes_layout.addRow("End:", self.goes_end_datetime)
 
@@ -1047,6 +1048,12 @@ class TimelapseDockWidget(QDockWidget):
 
     def start_bbox_drawing(self):
         """Start the bounding box drawing tool."""
+        # Clean up existing tool's rubber band before creating a new one
+        if self.bbox_tool and self.bbox_tool.rubber_band:
+            self.bbox_tool.rubber_band.reset(QgsWkbTypes.PolygonGeometry)
+            self.canvas.scene().removeItem(self.bbox_tool.rubber_band)
+            self.bbox_tool.rubber_band = None
+
         self.bbox_tool = BboxMapTool(self.canvas)
         self.bbox_tool.bbox_drawn.connect(self.on_bbox_drawn)
         self.canvas.setMapTool(self.bbox_tool)
@@ -1055,9 +1062,14 @@ class TimelapseDockWidget(QDockWidget):
 
     def clear_bbox(self):
         """Clear the drawn bounding box from the map."""
-        # Reset the bbox tool's rubber band
-        if self.bbox_tool:
-            self.bbox_tool.reset()
+        # Reset and remove the bbox tool's rubber band
+        if self.bbox_tool and self.bbox_tool.rubber_band:
+            self.bbox_tool.rubber_band.reset(QgsWkbTypes.PolygonGeometry)
+            self.bbox_tool.rubber_band.hide()
+            self.canvas.scene().removeItem(self.bbox_tool.rubber_band)
+            self.bbox_tool.rubber_band = None
+            self.bbox_tool.start_point = None
+            self.bbox_tool.end_point = None
 
         # Clear the extent fields
         self.xmin_edit.clear()
@@ -1450,8 +1462,11 @@ class TimelapseDockWidget(QDockWidget):
 
     def closeEvent(self, event):
         """Handle dock widget close event."""
-        if self.bbox_tool:
-            self.bbox_tool.reset()
+        if self.bbox_tool and self.bbox_tool.rubber_band:
+            self.bbox_tool.rubber_band.reset(QgsWkbTypes.PolygonGeometry)
+            self.bbox_tool.rubber_band.hide()
+            self.canvas.scene().removeItem(self.bbox_tool.rubber_band)
+            self.bbox_tool.rubber_band = None
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
             self.worker.wait()
