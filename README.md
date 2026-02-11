@@ -328,7 +328,7 @@ Creates an animation showing vegetation phenology over time.
 
 ```
 Imagery Type: GOES
-Satellite: GOES-17
+Satellite: GOES-19
 Scan: full_disk
 Start Date: 2021-10-24
 End Date: 2021-10-25

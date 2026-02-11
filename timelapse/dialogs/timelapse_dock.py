@@ -225,7 +225,7 @@ class TimelapseWorker(QThread):
                     "end_date": self.params.get(
                         "goes_end_datetime", "2021-10-25T01:00:00"
                     ),
-                    "data": self.params.get("goes_satellite", "GOES-17"),
+                    "data": self.params.get("goes_satellite", "GOES-19"),
                     "scan": self.params.get("goes_scan", "full_disk"),
                     "frames_per_second": self.params.get("fps", 10),
                 }
@@ -718,7 +718,7 @@ class TimelapseDockWidget(QDockWidget):
         goes_layout = QFormLayout()
 
         self.goes_satellite = QComboBox()
-        self.goes_satellite.addItems(["GOES-18", "GOES-17", "GOES-16"])
+        self.goes_satellite.addItems(["GOES-19", "GOES-18", "GOES-17", "GOES-16"])
         goes_layout.addRow("Satellite:", self.goes_satellite)
 
         self.goes_scan = QComboBox()

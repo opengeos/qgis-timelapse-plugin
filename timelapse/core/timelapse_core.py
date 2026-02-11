@@ -2058,7 +2058,7 @@ def create_modis_ndvi_timelapse(
 def goes_timeseries(
     start_date: str,
     end_date: str,
-    data: str = "GOES-17",
+    data: str = "GOES-19",
     scan: str = "full_disk",
     region: "ee.Geometry" = None,
 ) -> "ee.ImageCollection":
@@ -2067,7 +2067,7 @@ def goes_timeseries(
     Args:
         start_date: Start datetime (e.g., "2021-10-24T14:00:00").
         end_date: End datetime.
-        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18").
+        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18", "GOES-19").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
         region: Region of interest.
 
@@ -2080,7 +2080,7 @@ def goes_timeseries(
         "mesoscale": "MCMIPM",
     }
 
-    satellite_num = data[-2:]  # "16", "17", "18"
+    satellite_num = data[-2:]  # "16", "17", "18", "19"
     col = ee.ImageCollection(f"NOAA/GOES/{satellite_num}/{scan_types[scan.lower()]}")
 
     def apply_scale_and_offset(img):
@@ -2129,7 +2129,7 @@ def create_goes_timelapse(
     out_gif: str = None,
     start_date: str = "2021-10-24T14:00:00",
     end_date: str = "2021-10-25T01:00:00",
-    data: str = "GOES-17",
+    data: str = "GOES-19",
     scan: str = "full_disk",
     dimensions: int = 768,
     frames_per_second: int = 10,
@@ -2156,7 +2156,7 @@ def create_goes_timelapse(
         out_gif: Output GIF path.
         start_date: Start datetime (e.g., "2021-10-24T14:00:00").
         end_date: End datetime.
-        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18").
+        data: GOES satellite ("GOES-16", "GOES-17", "GOES-18", "GOES-19").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
         dimensions: Output dimensions.
         frames_per_second: Animation speed.
