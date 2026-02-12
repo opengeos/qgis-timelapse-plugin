@@ -227,6 +227,7 @@ class TimelapseWorker(QThread):
                     ),
                     "data": self.params.get("goes_satellite", "GOES-19"),
                     "scan": self.params.get("goes_scan", "full_disk"),
+                    "band_combination": self.params.get("goes_band_combination", "true_color"),
                     "frames_per_second": self.params.get("fps", 10),
                 }
                 result = timelapse_core.create_goes_timelapse(**goes_params)
@@ -724,6 +725,10 @@ class TimelapseDockWidget(QDockWidget):
         self.goes_scan = QComboBox()
         self.goes_scan.addItems(["full_disk", "conus", "mesoscale"])
         goes_layout.addRow("Scan:", self.goes_scan)
+
+        self.goes_band_combo = QComboBox()
+        self.goes_band_combo.addItems(["True Color", "Volcanic Ash", "Volcanic Gases"])
+        goes_layout.addRow("Band combo:", self.goes_band_combo)
 
         # GOES uses full datetime instead of year range
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -1324,6 +1329,15 @@ class TimelapseDockWidget(QDockWidget):
             orbits.append("descending")
         return orbits if orbits else ["ascending", "descending"]
 
+    def get_goes_band_combination(self):
+        """Map GOES band combo label to timelapse core key."""
+        mapping = {
+            "True Color": "true_color",
+            "Volcanic Ash": "volcanic_ash",
+            "Volcanic Gases": "volcanic_gases",
+        }
+        return mapping.get(self.goes_band_combo.currentText(), "true_color")
+
     def get_crs(self):
         """Get selected CRS."""
         crs_text = self.crs_combo.currentText()
@@ -1367,6 +1381,7 @@ class TimelapseDockWidget(QDockWidget):
             # GOES specific
             "goes_satellite": self.goes_satellite.currentText(),
             "goes_scan": self.goes_scan.currentText(),
+            "goes_band_combination": self.get_goes_band_combination(),
             "goes_start_datetime": self.goes_start_datetime.text(),
             "goes_end_datetime": self.goes_end_datetime.text(),
             # Visualization
