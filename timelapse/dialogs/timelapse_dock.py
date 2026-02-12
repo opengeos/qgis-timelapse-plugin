@@ -230,6 +230,11 @@ class TimelapseWorker(QThread):
                     "band_combination": self.params.get(
                         "goes_band_combination", "true_color"
                     ),
+                    "custom_bands": [
+                        self.params.get("goes_custom_red", "CMI_C02"),
+                        self.params.get("goes_custom_green", "CMI_C03"),
+                        self.params.get("goes_custom_blue", "CMI_C01"),
+                    ],
                     "frames_per_second": self.params.get("fps", 10),
                 }
                 result = timelapse_core.create_goes_timelapse(**goes_params)
@@ -729,8 +734,27 @@ class TimelapseDockWidget(QDockWidget):
         goes_layout.addRow("Scan:", self.goes_scan)
 
         self.goes_band_combo = QComboBox()
-        self.goes_band_combo.addItems(["True Color", "Volcanic Ash", "Volcanic Gases"])
+        self.goes_band_combo.addItems(["True Color", "Volcanic Ash", "Volcanic Gases", "Custom RGB"])
         goes_layout.addRow("Band combo:", self.goes_band_combo)
+
+        goes_bands = [f"CMI_C{i:02d}" for i in range(1, 17)]
+        self.goes_red_band = QComboBox()
+        self.goes_red_band.addItems(goes_bands)
+        self.goes_red_band.setCurrentText("CMI_C02")
+        goes_layout.addRow("Custom R:", self.goes_red_band)
+
+        self.goes_green_band = QComboBox()
+        self.goes_green_band.addItems(goes_bands)
+        self.goes_green_band.setCurrentText("CMI_C03")
+        goes_layout.addRow("Custom G:", self.goes_green_band)
+
+        self.goes_blue_band = QComboBox()
+        self.goes_blue_band.addItems(goes_bands)
+        self.goes_blue_band.setCurrentText("CMI_C01")
+        goes_layout.addRow("Custom B:", self.goes_blue_band)
+
+        self.goes_band_combo.currentTextChanged.connect(self.update_goes_band_controls)
+        self.update_goes_band_controls()
 
         # GOES uses full datetime instead of year range
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -1337,8 +1361,16 @@ class TimelapseDockWidget(QDockWidget):
             "True Color": "true_color",
             "Volcanic Ash": "volcanic_ash",
             "Volcanic Gases": "volcanic_gases",
+            "Custom RGB": "custom_rgb",
         }
         return mapping.get(self.goes_band_combo.currentText(), "true_color")
+
+    def update_goes_band_controls(self):
+        """Enable custom GOES RGB selectors only for Custom RGB mode."""
+        is_custom = self.goes_band_combo.currentText() == "Custom RGB"
+        self.goes_red_band.setEnabled(is_custom)
+        self.goes_green_band.setEnabled(is_custom)
+        self.goes_blue_band.setEnabled(is_custom)
 
     def get_crs(self):
         """Get selected CRS."""
@@ -1384,6 +1416,9 @@ class TimelapseDockWidget(QDockWidget):
             "goes_satellite": self.goes_satellite.currentText(),
             "goes_scan": self.goes_scan.currentText(),
             "goes_band_combination": self.get_goes_band_combination(),
+            "goes_custom_red": self.goes_red_band.currentText(),
+            "goes_custom_green": self.goes_green_band.currentText(),
+            "goes_custom_blue": self.goes_blue_band.currentText(),
             "goes_start_datetime": self.goes_start_datetime.text(),
             "goes_end_datetime": self.goes_end_datetime.text(),
             # Visualization
