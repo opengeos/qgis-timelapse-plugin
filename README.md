@@ -330,11 +330,18 @@ Creates an animation showing vegetation phenology over time.
 Imagery Type: GOES
 Satellite: GOES-19
 Scan: full_disk
+Band combo: True Color
 Start Date: 2021-10-24
 End Date: 2021-10-25
 ```
 
-Great for visualizing weather patterns and storms.
+Available GOES band combos:
+- **True Color** (CMI_C02, CMI_GREEN, CMI_C01)
+- **Volcanic Ash** (12.3-10.3 µm, 10.3-8.5 µm, 10.3 µm)
+- **Volcanic Gases** (12.3-10.3 µm, 10.3-3.9 µm, 10.3 µm)
+- **Custom RGB** (choose any three GOES bands using R/G/B dropdowns)
+
+Great for visualizing weather patterns, storms, and volcanic activity.
 
 ## Updating the Plugin
 

@@ -2061,6 +2061,8 @@ def goes_timeseries(
     data: str = "GOES-19",
     scan: str = "full_disk",
     region: "ee.Geometry" = None,
+    band_combination: str = "true_color",
+    custom_bands: List[str] = None,
 ) -> "ee.ImageCollection":
     """Create GOES satellite time series.
 
@@ -2070,6 +2072,8 @@ def goes_timeseries(
         data: GOES satellite ("GOES-16", "GOES-17", "GOES-18", "GOES-19").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
         region: Region of interest.
+        band_combination: GOES RGB composite ("true_color", "volcanic_ash", "volcanic_gases", "custom_rgb").
+        custom_bands: Custom GOES RGB bands [R, G, B] when band_combination is "custom_rgb".
 
     Returns:
         ee.ImageCollection of processed GOES images.
@@ -2114,8 +2118,50 @@ def goes_timeseries(
             .set("system:time_start", img.get("system:time_start"))
         )
 
+    def create_thermal_composite(img, mode: str):
+        red = img.select("CMI_C15").subtract(img.select("CMI_C13")).rename("GOES_RED")
+
+        if mode == "volcanic_gases":
+            green = (
+                img.select("CMI_C13")
+                .subtract(img.select("CMI_C07"))
+                .rename("GOES_GREEN")
+            )
+        else:  # volcanic_ash
+            green = (
+                img.select("CMI_C13")
+                .subtract(img.select("CMI_C11"))
+                .rename("GOES_GREEN")
+            )
+
+        blue = img.select("CMI_C13").rename("GOES_BLUE")
+        return ee.Image.cat([red, green, blue]).set(
+            "system:time_start", img.get("system:time_start")
+        )
+
+    mode = band_combination.lower().strip()
+
     def process_for_vis(img):
-        return scale_for_vis(add_green_band(apply_scale_and_offset(img)))
+        scaled = apply_scale_and_offset(img)
+        if mode == "true_color":
+            return scale_for_vis(add_green_band(scaled))
+        if mode in ["volcanic_ash", "volcanic_gases"]:
+            return create_thermal_composite(scaled, mode)
+        if mode == "custom_rgb":
+            selected = custom_bands or ["CMI_C02", "CMI_C03", "CMI_C01"]
+            if len(selected) != 3:
+                raise ValueError(
+                    "custom_bands must contain exactly three GOES bands [R, G, B]."
+                )
+            return (
+                scaled.select(selected)
+                .rename(["GOES_RED", "GOES_GREEN", "GOES_BLUE"])
+                .set("system:time_start", img.get("system:time_start"))
+            )
+        raise ValueError(
+            f"Unsupported GOES band_combination: {band_combination}. "
+            "Use true_color, volcanic_ash, volcanic_gases, or custom_rgb."
+        )
 
     result = col.filterDate(start_date, end_date)
     if region is not None:
@@ -2131,6 +2177,8 @@ def create_goes_timelapse(
     end_date: str = "2021-10-25T01:00:00",
     data: str = "GOES-19",
     scan: str = "full_disk",
+    band_combination: str = "true_color",
+    custom_bands: List[str] = None,
     dimensions: int = 768,
     frames_per_second: int = 10,
     crs: str = None,
@@ -2158,6 +2206,8 @@ def create_goes_timelapse(
         end_date: End datetime.
         data: GOES satellite ("GOES-16", "GOES-17", "GOES-18", "GOES-19").
         scan: Scan type ("full_disk", "conus", or "mesoscale").
+        band_combination: GOES RGB composite ("true_color", "volcanic_ash", "volcanic_gases", "custom_rgb").
+        custom_bands: Custom GOES RGB bands [R, G, B] when band_combination is "custom_rgb".
         dimensions: Output dimensions.
         frames_per_second: Animation speed.
         crs: Coordinate reference system.
@@ -2180,11 +2230,51 @@ def create_goes_timelapse(
     os.makedirs(os.path.dirname(out_gif), exist_ok=True)
 
     # Create time series
-    collection = goes_timeseries(start_date, end_date, data, scan, roi)
+    collection = goes_timeseries(
+        start_date, end_date, data, scan, roi, band_combination, custom_bands
+    )
 
     # Visualization params
-    bands = ["CMI_C02", "CMI_GREEN", "CMI_C01"]
-    vis_params = {"bands": bands, "min": 0, "max": 0.8}
+    mode = band_combination.lower().strip()
+    if mode == "true_color":
+        bands = ["CMI_C02", "CMI_GREEN", "CMI_C01"]
+        vis_params = {"bands": bands, "min": 0, "max": 0.8}
+    elif mode == "volcanic_ash":
+        bands = ["GOES_RED", "GOES_GREEN", "GOES_BLUE"]
+        vis_params = {
+            "bands": bands,
+            "min": [-6.7, -6.0, 243.6],
+            "max": [2.6, 6.3, 302.4],
+        }
+    elif mode == "volcanic_gases":
+        bands = ["GOES_RED", "GOES_GREEN", "GOES_BLUE"]
+        vis_params = {
+            "bands": bands,
+            "min": [-4.0, -4.0, 243.6],
+            "max": [2.0, 5.0, 302.4],
+        }
+    elif mode == "custom_rgb":
+        bands = ["GOES_RED", "GOES_GREEN", "GOES_BLUE"]
+        selected = custom_bands or ["CMI_C02", "CMI_C03", "CMI_C01"]
+
+        def _band_range(name: str):
+            if name.startswith("CMI_C"):
+                try:
+                    idx = int(name.split("CMI_C", 1)[1])
+                except Exception:
+                    idx = 2
+                if idx <= 6:
+                    return 0.0, 1.0
+                return 180.0, 330.0
+            return 0.0, 1.0
+
+        mins, maxs = zip(*[_band_range(b) for b in selected])
+        vis_params = {"bands": bands, "min": list(mins), "max": list(maxs)}
+    else:
+        raise ValueError(
+            f"Unsupported GOES band_combination: {band_combination}. "
+            "Use true_color, volcanic_ash, volcanic_gases, or custom_rgb."
+        )
 
     # Visualize collection and preserve original projection
     vis_collection = collection.select(bands).map(
