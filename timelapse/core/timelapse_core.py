@@ -2150,8 +2150,14 @@ def goes_timeseries(
         if mode == "custom_rgb":
             selected = custom_bands or ["CMI_C02", "CMI_C03", "CMI_C01"]
             if len(selected) != 3:
-                raise ValueError("custom_bands must contain exactly three GOES bands [R, G, B].")
-            return scaled.select(selected).rename(["GOES_RED", "GOES_GREEN", "GOES_BLUE"]).set("system:time_start", img.get("system:time_start"))
+                raise ValueError(
+                    "custom_bands must contain exactly three GOES bands [R, G, B]."
+                )
+            return (
+                scaled.select(selected)
+                .rename(["GOES_RED", "GOES_GREEN", "GOES_BLUE"])
+                .set("system:time_start", img.get("system:time_start"))
+            )
         raise ValueError(
             f"Unsupported GOES band_combination: {band_combination}. "
             "Use true_color, volcanic_ash, volcanic_gases, or custom_rgb."

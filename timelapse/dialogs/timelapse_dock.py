@@ -734,7 +734,9 @@ class TimelapseDockWidget(QDockWidget):
         goes_layout.addRow("Scan:", self.goes_scan)
 
         self.goes_band_combo = QComboBox()
-        self.goes_band_combo.addItems(["True Color", "Volcanic Ash", "Volcanic Gases", "Custom RGB"])
+        self.goes_band_combo.addItems(
+            ["True Color", "Volcanic Ash", "Volcanic Gases", "Custom RGB"]
+        )
         goes_layout.addRow("Band combo:", self.goes_band_combo)
 
         goes_bands = [f"CMI_C{i:02d}" for i in range(1, 17)]
