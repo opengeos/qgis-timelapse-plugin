@@ -227,7 +227,9 @@ class TimelapseWorker(QThread):
                     ),
                     "data": self.params.get("goes_satellite", "GOES-19"),
                     "scan": self.params.get("goes_scan", "full_disk"),
-                    "band_combination": self.params.get("goes_band_combination", "true_color"),
+                    "band_combination": self.params.get(
+                        "goes_band_combination", "true_color"
+                    ),
                     "frames_per_second": self.params.get("fps", 10),
                 }
                 result = timelapse_core.create_goes_timelapse(**goes_params)

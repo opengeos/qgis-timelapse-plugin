@@ -2120,12 +2120,22 @@ def goes_timeseries(
         red = img.select("CMI_C15").subtract(img.select("CMI_C13")).rename("GOES_RED")
 
         if mode == "volcanic_gases":
-            green = img.select("CMI_C13").subtract(img.select("CMI_C07")).rename("GOES_GREEN")
+            green = (
+                img.select("CMI_C13")
+                .subtract(img.select("CMI_C07"))
+                .rename("GOES_GREEN")
+            )
         else:  # volcanic_ash
-            green = img.select("CMI_C13").subtract(img.select("CMI_C11")).rename("GOES_GREEN")
+            green = (
+                img.select("CMI_C13")
+                .subtract(img.select("CMI_C11"))
+                .rename("GOES_GREEN")
+            )
 
         blue = img.select("CMI_C13").rename("GOES_BLUE")
-        return ee.Image.cat([red, green, blue]).set("system:time_start", img.get("system:time_start"))
+        return ee.Image.cat([red, green, blue]).set(
+            "system:time_start", img.get("system:time_start")
+        )
 
     mode = band_combination.lower().strip()
 
@@ -2205,7 +2215,9 @@ def create_goes_timelapse(
     os.makedirs(os.path.dirname(out_gif), exist_ok=True)
 
     # Create time series
-    collection = goes_timeseries(start_date, end_date, data, scan, roi, band_combination)
+    collection = goes_timeseries(
+        start_date, end_date, data, scan, roi, band_combination
+    )
 
     # Visualization params
     mode = band_combination.lower().strip()
@@ -2214,10 +2226,18 @@ def create_goes_timelapse(
         vis_params = {"bands": bands, "min": 0, "max": 0.8}
     elif mode == "volcanic_ash":
         bands = ["GOES_RED", "GOES_GREEN", "GOES_BLUE"]
-        vis_params = {"bands": bands, "min": [-6.7, -6.0, 243.6], "max": [2.6, 6.3, 302.4]}
+        vis_params = {
+            "bands": bands,
+            "min": [-6.7, -6.0, 243.6],
+            "max": [2.6, 6.3, 302.4],
+        }
     elif mode == "volcanic_gases":
         bands = ["GOES_RED", "GOES_GREEN", "GOES_BLUE"]
-        vis_params = {"bands": bands, "min": [-4.0, -4.0, 243.6], "max": [2.0, 5.0, 302.4]}
+        vis_params = {
+            "bands": bands,
+            "min": [-4.0, -4.0, 243.6],
+            "max": [2.0, 5.0, 302.4],
+        }
     else:
         raise ValueError(
             f"Unsupported GOES band_combination: {band_combination}. "
