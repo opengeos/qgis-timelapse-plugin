@@ -46,6 +46,44 @@ def check_dependencies() -> Dict[str, bool]:
     }
 
 
+def reload_dependencies() -> Dict[str, bool]:
+    """Re-attempt importing dependencies after they have been installed.
+
+    This should be called after ``ensure_venv_packages_available()`` has added
+    the venv site-packages to ``sys.path``. It updates the module-level globals
+    (``ee``, ``Image``, ``ImageDraw``, ``ImageFont``) so that subsequent code
+    can use them.
+
+    Returns:
+        Dict with dependency names and their availability after reload.
+    """
+    global ee, Image, ImageDraw, ImageFont
+
+    if ee is None:
+        try:
+            import ee as _ee
+
+            ee = _ee
+        except ImportError:
+            pass
+
+    if Image is None:
+        try:
+            from PIL import (
+                Image as _Image,
+                ImageDraw as _ImageDraw,
+                ImageFont as _ImageFont,
+            )
+
+            Image = _Image
+            ImageDraw = _ImageDraw
+            ImageFont = _ImageFont
+        except ImportError:
+            pass
+
+    return check_dependencies()
+
+
 def get_ee_project() -> Optional[str]:
     """Get GEE project ID from environment variable.
 

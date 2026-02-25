@@ -7,6 +7,7 @@ from satellite and aerial imagery using Google Earth Engine.
 
 from .timelapse_core import (
     check_dependencies,
+    reload_dependencies,
     get_ee_project,
     is_ee_initialized,
     initialize_ee,
@@ -22,6 +23,7 @@ from .timelapse_core import (
 
 __all__ = [
     "check_dependencies",
+    "reload_dependencies",
     "get_ee_project",
     "is_ee_initialized",
     "initialize_ee",

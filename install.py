@@ -11,8 +11,6 @@ Usage:
 Options:
     --profile PROFILE    QGIS profile name (default: 'default')
     --uninstall          Remove the plugin instead of installing
-    --deps               Also install Python dependencies
-    --no-deps            Skip dependency installation
     --qgis-path PATH     Custom QGIS plugins directory path
     --help               Show this help message
 """
@@ -21,7 +19,6 @@ import argparse
 import os
 import platform
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -131,50 +128,6 @@ def get_plugin_source_directory() -> Path:
         return plugin_dir
     # Fallback to script directory if plugin folder doesn't exist
     return script_dir
-
-
-def install_dependencies(use_pip: bool = True) -> bool:
-    """
-    Install Python dependencies.
-
-    Args:
-        use_pip: Whether to use pip for installation.
-
-    Returns:
-        True if successful, False otherwise.
-    """
-    print("\n📦 Installing Python dependencies...")
-
-    requirements_file = get_script_directory() / "requirements.txt"
-
-    if not requirements_file.exists():
-        print("⚠️  requirements.txt not found, skipping dependency installation")
-        return True
-
-    try:
-        # Try to find the appropriate Python/pip
-        python_cmd = sys.executable
-
-        # Install using pip
-        result = subprocess.run(
-            [python_cmd, "-m", "pip", "install", "-r", str(requirements_file)],
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode == 0:
-            print("✅ Dependencies installed successfully")
-            return True
-        else:
-            print(f"⚠️  pip install failed: {result.stderr}")
-            print("   You may need to install dependencies manually:")
-            print("   pip install earthengine-api Pillow")
-            return False
-
-    except Exception as e:
-        print(f"⚠️  Failed to install dependencies: {e}")
-        print("   Please install manually: pip install earthengine-api Pillow")
-        return False
 
 
 def install_plugin(plugins_dir: Path, source_dir: Path) -> bool:
@@ -301,7 +254,6 @@ def main():
         epilog="""
 Examples:
   python install.py                    # Install with default settings
-  python install.py --deps             # Install with dependencies
   python install.py --profile myprof   # Install to specific QGIS profile
   python install.py --uninstall        # Uninstall the plugin
   python install.py --qgis-path /path  # Install to custom path
@@ -315,12 +267,6 @@ Examples:
         "--uninstall",
         action="store_true",
         help="Uninstall the plugin instead of installing",
-    )
-    parser.add_argument(
-        "--deps", action="store_true", help="Also install Python dependencies"
-    )
-    parser.add_argument(
-        "--no-deps", action="store_true", help="Skip dependency installation prompt"
     )
     parser.add_argument("--qgis-path", help="Custom QGIS plugins directory path")
 
@@ -348,17 +294,6 @@ Examples:
     if args.uninstall:
         success = uninstall_plugin(plugins_dir)
         sys.exit(0 if success else 1)
-
-    # Install dependencies if requested
-    if args.deps:
-        install_dependencies()
-    elif not args.no_deps:
-        # Ask user
-        print("\n📦 Would you like to install Python dependencies?")
-        print("   (earthengine-api, Pillow)")
-        response = input("   Install dependencies? [y/N]: ").strip().lower()
-        if response in ("y", "yes"):
-            install_dependencies()
 
     # Install plugin
     success = install_plugin(plugins_dir, source_dir)
