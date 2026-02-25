@@ -3,12 +3,11 @@
 # Installation script for QGIS Timelapse Plugin (Linux/macOS)
 #
 # Usage:
-#   ./install.sh [--profile PROFILE] [--uninstall] [--deps]
+#   ./install.sh [--profile PROFILE] [--uninstall]
 #
 # Options:
 #   --profile PROFILE    QGIS profile name (default: 'default')
 #   --uninstall          Remove the plugin instead of installing
-#   --deps               Also install Python dependencies
 #
 
 set -e
@@ -20,7 +19,6 @@ PLUGIN_SOURCE="${SCRIPT_DIR}/${PLUGIN_NAME}"
 # Default values
 PROFILE="default"
 UNINSTALL=false
-INSTALL_DEPS=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -33,17 +31,12 @@ while [[ $# -gt 0 ]]; do
             UNINSTALL=true
             shift
             ;;
-        --deps)
-            INSTALL_DEPS=true
-            shift
-            ;;
         --help|-h)
-            echo "Usage: $0 [--profile PROFILE] [--uninstall] [--deps]"
+            echo "Usage: $0 [--profile PROFILE] [--uninstall]"
             echo ""
             echo "Options:"
             echo "  --profile PROFILE    QGIS profile name (default: 'default')"
             echo "  --uninstall          Remove the plugin instead of installing"
-            echo "  --deps               Also install Python dependencies"
             exit 0
             ;;
         *)
@@ -101,17 +94,6 @@ if [[ "$UNINSTALL" == true ]]; then
         echo "⚠️  Plugin not found at: ${PLUGIN_DEST}"
     fi
     exit 0
-fi
-
-# Install dependencies if requested
-if [[ "$INSTALL_DEPS" == true ]]; then
-    echo "📦 Installing Python dependencies..."
-    if [[ -f "${SCRIPT_DIR}/requirements.txt" ]]; then
-        pip install -r "${SCRIPT_DIR}/requirements.txt" && echo "✅ Dependencies installed" || echo "⚠️  Some dependencies failed to install"
-    else
-        echo "⚠️  requirements.txt not found"
-    fi
-    echo ""
 fi
 
 # Create plugins directory if it doesn't exist

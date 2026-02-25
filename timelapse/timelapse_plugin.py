@@ -179,9 +179,43 @@ class TimelapsePlugin:
         if self.menu:
             self.menu.deleteLater()
 
+    def _ensure_dependencies(self) -> bool:
+        """Check if dependencies are available and prompt installation if not.
+
+        Returns:
+            True if dependencies are ready, False if user cancelled.
+        """
+        from .core import venv_manager
+
+        if venv_manager.dependencies_available():
+            venv_manager.ensure_venv_packages_available()
+            from .core.timelapse_core import reload_dependencies
+
+            reload_dependencies()
+            return True
+
+        # Dependencies not found -- show the installer dialog
+        from .dialogs.dependency_dialog import DependencyDialog
+
+        dialog = DependencyDialog(self.iface.mainWindow())
+        dialog.exec_()
+
+        if dialog.was_successful():
+            from .core.timelapse_core import reload_dependencies
+
+            reload_dependencies()
+            return True
+
+        return False
+
     def toggle_timelapse_dock(self):
         """Toggle the Timelapse dock widget visibility."""
         if self._timelapse_dock is None:
+            # Ensure dependencies are installed before creating the dock
+            if not self._ensure_dependencies():
+                self.timelapse_action.setChecked(False)
+                return
+
             try:
                 from .dialogs.timelapse_dock import TimelapseDockWidget
 

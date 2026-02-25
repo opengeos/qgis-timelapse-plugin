@@ -2,7 +2,7 @@
 name=Timelapse
 qgisMinimumVersion=3.28
 description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
-version=0.5.0
+version=0.7.0
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
@@ -32,29 +32,31 @@ experimental=False
 deprecated=False
 
 changelog=
+    0.7.0:
+        - Add one-click dependency installer
     0.6.0:
-    - Add custom RGB band combination for GOES timelapse
-    - Add GOES-19 support for GOES timelapse
+        - Add custom RGB band combination for GOES timelapse
+        - Add GOES-19 support for GOES timelapse
     0.5.0:
-    - Fix GOES overlay data projection issue
+        - Fix GOES overlay data projection issue
     0.4.0:
-    - Fix PIL issue on Windows
+        - Fix PIL issue on Windows
     0.3.0:
-    - Improve error handling for Google Earth Engine project ID
+        - Improve error handling for Google Earth Engine project ID
     0.2.0:
-    - Add vector overlay
+        - Add vector overlay
     0.1.0:
-    - Initial release with reorganized plugin structure
-    - Added plugin update checker with automatic installation
-    - Added about dialog with plugin information
-    - Support for NAIP timelapse
-    - Support for Landsat timelapse (1984-present)
-    - Support for Sentinel-2 timelapse
-    - Support for Sentinel-1 timelapse
-    - Support for MODIS NDVI timelapse
-    - Support for GOES weather satellite timelapse
-    - Area of interest from map extent or vector layer
-    - GIF and MP4 output formats
-    - Customizable text overlays and progress bars
+        - Initial release with reorganized plugin structure
+        - Added plugin update checker with automatic installation
+        - Added about dialog with plugin information
+        - Support for NAIP timelapse
+        - Support for Landsat timelapse (1984-present)
+        - Support for Sentinel-2 timelapse
+        - Support for Sentinel-1 timelapse
+        - Support for MODIS NDVI timelapse
+        - Support for GOES weather satellite timelapse
+        - Area of interest from map extent or vector layer
+        - GIF and MP4 output formats
+        - Customizable text overlays and progress bars
 
 
