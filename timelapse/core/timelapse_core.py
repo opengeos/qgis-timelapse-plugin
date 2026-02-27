@@ -8,6 +8,7 @@ Based on the geemap timelapse module.
 
 import datetime
 import glob
+import json
 import os
 import re
 import tempfile
@@ -84,6 +85,44 @@ def reload_dependencies() -> Dict[str, bool]:
     return check_dependencies()
 
 
+def _load_ee_credentials():
+    """Load Earth Engine OAuth2 credentials from the credentials file.
+
+    Reads ``~/.config/earthengine/credentials`` and builds a
+    ``google.oauth2.credentials.Credentials`` object that can be passed
+    to ``ee.Initialize()``.  This is more reliable than relying on
+    ``ee``'s built-in auto-discovery inside the QGIS process, where
+    bundled library versions may conflict with the venv packages.
+
+    Returns:
+        A ``google.oauth2.credentials.Credentials`` instance, or *None*
+        if the file does not exist or cannot be parsed.
+    """
+    cred_path = os.path.expanduser("~/.config/earthengine/credentials")
+    if not os.path.exists(cred_path):
+        return None
+
+    try:
+        with open(cred_path) as f:
+            data = json.load(f)
+
+        refresh_token = data.get("refresh_token")
+        if not refresh_token:
+            return None
+
+        from google.oauth2.credentials import Credentials
+
+        return Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=data.get("client_id"),
+            client_secret=data.get("client_secret"),
+        )
+    except Exception:
+        return None
+
+
 def get_ee_project() -> Optional[str]:
     """Get GEE project ID from environment variable.
 
@@ -111,7 +150,8 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
     """Initialize Google Earth Engine.
 
     Args:
-        project: GEE project ID. If None, uses EE_PROJECT_ID env variable.
+        project: GEE project ID. If None, reads from QSettings then
+            EE_PROJECT_ID env variable.
         force: If True, reinitialize even if already initialized.
 
     Returns:
@@ -126,28 +166,84 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
     if _ee_initialized and not force:
         return True
 
-    # Use provided project or fall back to env variable
+    # Use provided project or fall back to QSettings / env variable
     if project is None or project.strip() == "":
-        project = get_ee_project()
+        try:
+            from qgis.PyQt.QtCore import QSettings
+
+            settings = QSettings()
+            project = settings.value("QgisTimelapse/project_id", "", type=str).strip()
+        except Exception:
+            pass
+
+        if not project:
+            project = get_ee_project()
+
+    # Load credentials from disk (more reliable than ee's auto-discovery
+    # inside QGIS due to bundled library version conflicts)
+    credentials = _load_ee_credentials()
 
     try:
         if project:
-            ee.Initialize(project=project)
+            ee.Initialize(credentials=credentials, project=project)
         else:
-            ee.Initialize()
+            ee.Initialize(credentials=credentials)
         _ee_initialized = True
         return True
     except Exception:
         try:
             ee.Authenticate()
             if project:
-                ee.Initialize(project=project)
+                ee.Initialize(credentials=credentials, project=project)
             else:
-                ee.Initialize()
+                ee.Initialize(credentials=credentials)
             _ee_initialized = True
             return True
         except Exception:
             return False
+
+
+def try_auto_initialize_ee() -> bool:
+    """Try to auto-initialize Earth Engine using QSettings or env var.
+
+    This is a non-interactive initialization that silently succeeds or fails.
+    Suitable for calling during plugin startup.
+
+    Returns:
+        True if initialization was successful, False otherwise.
+    """
+    global _ee_initialized
+
+    if _ee_initialized:
+        return True
+
+    if ee is None:
+        return False
+
+    # Read project ID from QSettings
+    project = None
+    try:
+        from qgis.PyQt.QtCore import QSettings
+
+        settings = QSettings()
+        project = settings.value("QgisTimelapse/project_id", "", type=str).strip()
+    except Exception:
+        pass
+
+    if not project:
+        project = os.environ.get("EE_PROJECT_ID", None)
+
+    if not project:
+        return False
+
+    credentials = _load_ee_credentials()
+
+    try:
+        ee.Initialize(credentials=credentials, project=project)
+        _ee_initialized = True
+        return True
+    except Exception:
+        return False
 
 
 def bbox_to_ee_geometry(
