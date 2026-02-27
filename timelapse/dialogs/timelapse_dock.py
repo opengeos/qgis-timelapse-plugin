@@ -519,7 +519,19 @@ class TimelapseDockWidget(QDockWidget):
         gee_layout = QFormLayout()
 
         self.gee_project_edit = QLineEdit()
-        self.gee_project_edit.setPlaceholderText("Uses EE_PROJECT_ID env var if empty")
+        self.gee_project_edit.setPlaceholderText(
+            "Set in Settings or EE_PROJECT_ID env var"
+        )
+        # Pre-populate from QSettings
+        try:
+            from qgis.PyQt.QtCore import QSettings
+
+            settings = QSettings()
+            saved_project = settings.value("QgisTimelapse/project_id", "", type=str)
+            if saved_project:
+                self.gee_project_edit.setText(saved_project)
+        except Exception:
+            pass
         gee_layout.addRow("Project ID:", self.gee_project_edit)
 
         gee_group.setLayout(gee_layout)

@@ -37,8 +37,14 @@ class TimelapsePlugin:
             self.translator.load(locale_path)
             QCoreApplication.installTranslator(self.translator)
 
-        # Dock widget (lazy loaded)
+        # Dock widgets (lazy loaded)
         self._timelapse_dock = None
+        self._settings_dock = None
+
+        # Dependency state
+        self._deps_ready = False
+        self._deps_initialized = False
+        self._deps_signal_connected = False
 
     def tr(self, message):
         """Get the translation for a string using Qt translation API.
@@ -123,12 +129,26 @@ class TimelapsePlugin:
         if not os.path.exists(about_icon):
             about_icon = ":/images/themes/default/mActionHelpContents.svg"
 
+        settings_icon = os.path.join(icon_base, "settings.svg")
+        if not os.path.exists(settings_icon):
+            settings_icon = ":/images/themes/default/mActionOptions.svg"
+
         # Add Timelapse Panel action (checkable for dock toggle)
         self.timelapse_action = self.add_action(
             main_icon,
             self.tr("Create Timelapse"),
             self.toggle_timelapse_dock,
             status_tip=self.tr("Toggle Timelapse Animation Creator Panel"),
+            checkable=True,
+            parent=self.iface.mainWindow(),
+        )
+
+        # Add Settings Panel action (checkable for dock toggle)
+        self.settings_action = self.add_action(
+            settings_icon,
+            self.tr("Settings"),
+            self.toggle_settings_dock,
+            status_tip=self.tr("Toggle Timelapse Settings Panel"),
             checkable=True,
             parent=self.iface.mainWindow(),
         )
@@ -161,11 +181,16 @@ class TimelapsePlugin:
 
     def unload(self):
         """Remove the plugin menu item and icon from QGIS GUI."""
-        # Remove dock widget
+        # Remove dock widgets
         if self._timelapse_dock:
             self.iface.removeDockWidget(self._timelapse_dock)
             self._timelapse_dock.deleteLater()
             self._timelapse_dock = None
+
+        if self._settings_dock:
+            self.iface.removeDockWidget(self._settings_dock)
+            self._settings_dock.deleteLater()
+            self._settings_dock = None
 
         # Remove actions
         for action in self.actions:
@@ -179,40 +204,216 @@ class TimelapsePlugin:
         if self.menu:
             self.menu.deleteLater()
 
-    def _ensure_dependencies(self) -> bool:
-        """Check if dependencies are available and prompt installation if not.
+    # ------------------------------------------------------------------
+    # Dependency management
+    # ------------------------------------------------------------------
+
+    def _ensure_deps(self) -> bool:
+        """Check if dependencies are installed and loaded.
+
+        Returns True if deps are ready. If not, shows a non-blocking
+        warning and offers to open Settings -> Dependencies tab.
 
         Returns:
-            True if dependencies are ready, False if user cancelled.
+            True if dependencies are ready and loaded, False otherwise.
         """
-        from .core import venv_manager
-
-        if venv_manager.dependencies_available():
-            venv_manager.ensure_venv_packages_available()
-            from .core.timelapse_core import reload_dependencies
-
-            reload_dependencies()
+        if self._deps_ready:
             return True
 
-        # Dependencies not found -- show the installer dialog
-        from .dialogs.dependency_dialog import DependencyDialog
+        from .core.venv_manager import ensure_venv_packages_available, get_venv_status
 
-        dialog = DependencyDialog(self.iface.mainWindow())
-        dialog.exec_()
+        is_ready, status_msg = get_venv_status()
 
-        if dialog.was_successful():
-            from .core.timelapse_core import reload_dependencies
+        if is_ready:
+            if ensure_venv_packages_available():
+                self._deps_ready = True
+                self._post_deps_init()
+                return True
 
-            reload_dependencies()
-            return True
-
+        # Dependencies not ready -- show non-blocking warning
+        self._check_dependencies_on_open()
         return False
+
+    def _check_dependencies_on_open(self):
+        """Check if dependencies are installed and prompt if missing."""
+        try:
+            from .core.venv_manager import check_dependencies
+
+            all_ok, missing, _installed = check_dependencies()
+            if all_ok:
+                return
+
+            missing_names = ", ".join(name for name, _ in missing)
+            reply = QMessageBox.warning(
+                self.iface.mainWindow(),
+                "Missing Dependencies",
+                f"The following required packages are not installed:\n\n"
+                f"  {missing_names}\n\n"
+                f"The Timelapse plugin needs these packages to function.\n\n"
+                f"Would you like to open Settings to install them?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+
+            if reply == QMessageBox.Yes:
+                self._open_settings_deps_tab()
+
+        except Exception:
+            # Don't let dependency check errors prevent other actions
+            pass
+
+    def _open_settings_deps_tab(self):
+        """Open the Settings dock and switch to the Dependencies tab."""
+        if self._settings_dock is None:
+            try:
+                from .dialogs.settings_dock import SettingsDockWidget
+
+                self._settings_dock = SettingsDockWidget(
+                    self.iface, self.iface.mainWindow()
+                )
+                self._settings_dock.setObjectName("TimelapseSettingsDock")
+                self._settings_dock.visibilityChanged.connect(
+                    self._on_settings_visibility_changed
+                )
+                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self._connect_deps_signal()
+            except Exception as e:
+                QMessageBox.critical(
+                    self.iface.mainWindow(),
+                    "Error",
+                    f"Failed to create Settings panel:\n{str(e)}",
+                )
+                return
+
+        self._settings_dock.show()
+        self._settings_dock.raise_()
+        self.settings_action.setChecked(True)
+        self._settings_dock.show_dependencies_tab()
+
+    def _connect_deps_signal(self):
+        """Connect settings dock signals to refresh deps state."""
+        if not self._deps_signal_connected and self._settings_dock is not None:
+            self._settings_dock.deps_installed.connect(self._on_deps_installed)
+            self._settings_dock.auth_succeeded.connect(self._on_auth_completed)
+            self._settings_dock.settings_saved.connect(self._try_auto_init_ee)
+            self._deps_signal_connected = True
+
+    def _on_deps_installed(self):
+        """Handle successful dependency installation from settings dock."""
+        from .core.venv_manager import ensure_venv_packages_available
+
+        if ensure_venv_packages_available():
+            self._deps_ready = True
+            self._post_deps_init()
+            self.iface.messageBar().pushSuccess(
+                "Timelapse",
+                "Dependencies installed! You can now use all Timelapse features.",
+            )
+
+    def _on_auth_completed(self):
+        """Handle successful EE authentication from the settings dock.
+
+        Tries to initialize EE, and if no project ID is configured yet,
+        opens the Settings panel on the Earth Engine tab so the user can
+        enter one.
+        """
+        from .core.timelapse_core import is_ee_initialized
+
+        self._try_auto_init_ee()
+
+        if not is_ee_initialized():
+            # Project ID not set yet — open Settings on the EE tab
+            self._show_settings_ee_tab()
+
+    def _show_settings_ee_tab(self):
+        """Open the Settings dock and switch to the Earth Engine tab."""
+        if self._settings_dock is None:
+            try:
+                from .dialogs.settings_dock import SettingsDockWidget
+
+                self._settings_dock = SettingsDockWidget(
+                    self.iface, self.iface.mainWindow()
+                )
+                self._settings_dock.setObjectName("TimelapseSettingsDock")
+                self._settings_dock.visibilityChanged.connect(
+                    self._on_settings_visibility_changed
+                )
+                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self._connect_deps_signal()
+            except Exception as e:
+                QMessageBox.critical(
+                    self.iface.mainWindow(),
+                    "Error",
+                    f"Failed to create Settings panel:\n{str(e)}",
+                )
+                return
+        else:
+            self._settings_dock.show()
+            self._settings_dock.raise_()
+        if self._settings_dock is not None:
+            self._settings_dock.show_ee_tab()
+            self.iface.messageBar().pushInfo(
+                "Timelapse",
+                "Please enter your Google Cloud project ID and click Save Settings.",
+            )
+
+    def _post_deps_init(self):
+        """One-time initialization after dependencies are confirmed ready."""
+        if self._deps_initialized:
+            return
+        self._deps_initialized = True
+        self._try_auto_init_ee()
+
+    def _try_auto_init_ee(self):
+        """Try to auto-initialize Earth Engine using settings or env var."""
+        try:
+            from .core.timelapse_core import initialize_ee, is_ee_initialized
+
+            if is_ee_initialized():
+                return
+
+            # Read project ID from plugin settings
+            settings = QSettings()
+            project_id = settings.value("QgisTimelapse/project_id", "", type=str)
+            if project_id:
+                project_id = project_id.strip()
+                if not project_id:
+                    project_id = None
+
+            # Fall back to environment variable
+            if not project_id:
+                project_id = os.environ.get("EE_PROJECT_ID", None)
+
+            if project_id:
+                try:
+                    from qgis.core import QgsMessageLog, Qgis
+
+                    QgsMessageLog.logMessage(
+                        f"Auto-initializing Earth Engine with project: {project_id}",
+                        "Timelapse",
+                        Qgis.Info,
+                    )
+                    initialize_ee(project=project_id)
+                except Exception as exc:
+                    from qgis.core import QgsMessageLog, Qgis
+
+                    QgsMessageLog.logMessage(
+                        f"Auto-init EE failed: {exc}",
+                        "Timelapse",
+                        Qgis.Warning,
+                    )
+        except ImportError:
+            pass
+
+    # ------------------------------------------------------------------
+    # Dock widget toggles
+    # ------------------------------------------------------------------
 
     def toggle_timelapse_dock(self):
         """Toggle the Timelapse dock widget visibility."""
         if self._timelapse_dock is None:
             # Ensure dependencies are installed before creating the dock
-            if not self._ensure_dependencies():
+            if not self._ensure_deps():
                 self.timelapse_action.setChecked(False)
                 return
 
@@ -251,6 +452,53 @@ class TimelapsePlugin:
         """Handle Timelapse dock visibility change."""
         self.timelapse_action.setChecked(visible)
 
+    def toggle_settings_dock(self):
+        """Toggle the Settings dock widget visibility.
+
+        Settings must be accessible even without dependencies installed,
+        because the Dependencies tab is how users install them.
+        """
+        if self._settings_dock is None:
+            try:
+                from .dialogs.settings_dock import SettingsDockWidget
+
+                self._settings_dock = SettingsDockWidget(
+                    self.iface, self.iface.mainWindow()
+                )
+                self._settings_dock.setObjectName("TimelapseSettingsDock")
+                self._settings_dock.visibilityChanged.connect(
+                    self._on_settings_visibility_changed
+                )
+                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self._settings_dock.show()
+                self._settings_dock.raise_()
+                self._connect_deps_signal()
+                return
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self.iface.mainWindow(),
+                    "Error",
+                    f"Failed to create Settings panel:\n{str(e)}",
+                )
+                self.settings_action.setChecked(False)
+                return
+
+        # Toggle visibility
+        if self._settings_dock.isVisible():
+            self._settings_dock.hide()
+        else:
+            self._settings_dock.show()
+            self._settings_dock.raise_()
+
+    def _on_settings_visibility_changed(self, visible):
+        """Handle Settings dock visibility change."""
+        self.settings_action.setChecked(visible)
+
+    # ------------------------------------------------------------------
+    # About and updates
+    # ------------------------------------------------------------------
+
     def show_about(self):
         """Display the about dialog."""
         try:
@@ -258,7 +506,7 @@ class TimelapsePlugin:
 
             dialog = AboutDialog(self.plugin_dir, self.iface.mainWindow())
             dialog.exec_()
-        except Exception as e:
+        except Exception:
             # Fallback to simple message box
             version = self._get_version()
             about_text = f"""
