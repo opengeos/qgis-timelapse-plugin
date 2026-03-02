@@ -258,6 +258,14 @@ def verify_uv():
         env = os.environ.copy()
         env.pop("PYTHONPATH", None)
         env.pop("PYTHONHOME", None)
+        # Strip QGIS SSL variables that may point to non-existent paths
+        for var in (
+            "SSL_CERT_DIR",
+            "SSL_CERT_FILE",
+            "REQUESTS_CA_BUNDLE",
+            "CURL_CA_BUNDLE",
+        ):
+            env.pop(var, None)
 
         kwargs = {}
         if sys.platform == "win32":
