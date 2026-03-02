@@ -67,6 +67,12 @@ def _get_clean_env_for_venv():
         "PROJ_LIB",
         "GDAL_DATA",
         "GDAL_DRIVER_PATH",
+        # SSL/CA certificate variables -- QGIS may set these to
+        # QGIS-internal paths that do not exist outside QGIS.
+        "SSL_CERT_DIR",
+        "SSL_CERT_FILE",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
     ]
     for key in vars_to_remove:
         env.pop(key, None)
@@ -90,6 +96,34 @@ def _get_subprocess_kwargs():
         kwargs["startupinfo"] = startupinfo
         kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
     return kwargs
+
+
+def _strip_stderr_warnings(stderr):
+    """Remove known non-fatal warning lines from stderr.
+
+    Some tools (e.g., uv) emit warnings to stderr that are not actual errors.
+    Stripping these ensures the real error message is visible when stderr is
+    truncated for display.
+
+    Args:
+        stderr: Raw stderr string from a subprocess.
+
+    Returns:
+        The stderr string with known warning lines removed.
+    """
+    if not stderr:
+        return stderr
+    warning_prefixes = (
+        "warning: Ignoring invalid",
+        "warning: Failed to query",
+    )
+    lines = stderr.splitlines()
+    filtered = [
+        line
+        for line in lines
+        if not any(line.strip().startswith(prefix) for prefix in warning_prefixes)
+    ]
+    return "\n".join(filtered).strip()
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +414,8 @@ def create_venv(venv_dir=None, progress_callback=None):
                             err = ensurepip_result.stderr or ensurepip_result.stdout
                             _log(f"ensurepip failed: {err[:200]}", Qgis.Warning)
                             _cleanup_partial_venv(venv_dir)
-                            return False, f"Failed to bootstrap pip: {err[:200]}"
+                            user_err = _strip_stderr_warnings(err) or err
+                            return False, f"Failed to bootstrap pip: {user_err[:300]}"
                     except Exception as e:
                         _log(f"ensurepip exception: {e}", Qgis.Warning)
                         _cleanup_partial_venv(venv_dir)
@@ -395,7 +430,8 @@ def create_venv(venv_dir=None, progress_callback=None):
             )
             _log(f"Failed to create venv: {error_msg}", Qgis.Critical)
             _cleanup_partial_venv(venv_dir)
-            return False, f"Failed to create venv: {error_msg[:200]}"
+            user_msg = _strip_stderr_warnings(error_msg) or error_msg
+            return False, f"Failed to create venv: {user_msg[:300]}"
 
     except subprocess.TimeoutExpired:
         _log("Virtual environment creation timed out", Qgis.Critical)
