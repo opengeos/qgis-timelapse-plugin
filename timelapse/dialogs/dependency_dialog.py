@@ -88,7 +88,7 @@ class DependencyDialog(QDialog):
         header_font.setPointSize(14)
         header_font.setBold(True)
         header.setFont(header_font)
-        header.setAlignment(Qt.AlignCenter)
+        header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header)
 
         # Description
@@ -211,10 +211,10 @@ class DependencyDialog(QDialog):
                 self,
                 "Installation in Progress",
                 "An installation is in progress. " "Are you sure you want to cancel?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            if reply != QMessageBox.Yes:
+            if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
             self._install_worker.terminate()
