@@ -115,7 +115,7 @@ def _load_ee_credentials():
         return Credentials(
             token=None,
             refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",
+            token_uri="https://oauth2.googleapis.com/token",  # nosec B106 (public Google OAuth2 endpoint, not a secret)
             client_id=data.get("client_id"),
             client_secret=data.get("client_secret"),
         )
@@ -173,7 +173,9 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
 
             settings = QSettings()
             project = settings.value("QgisTimelapse/project_id", "", type=str).strip()
-        except Exception:
+        except (
+            Exception
+        ):  # nosec B110 (best-effort QSettings read; falls through to get_ee_project below)
             pass
 
         if not project:
@@ -227,7 +229,9 @@ def try_auto_initialize_ee() -> bool:
 
         settings = QSettings()
         project = settings.value("QgisTimelapse/project_id", "", type=str).strip()
-    except Exception:
+    except (
+        Exception
+    ):  # nosec B110 (best-effort QSettings read; falls through to env var below)
         pass
 
     if not project:
@@ -1155,6 +1159,7 @@ def download_ee_video(
     Returns:
         Path to output GIF.
     """
+    import shutil
     import urllib.request
     import urllib.error
 
@@ -1164,16 +1169,26 @@ def download_ee_video(
     except Exception as e:
         raise RuntimeError(f"Failed to generate video URL: {e}") from e
 
+    # Earth Engine thumbnail URLs are always https; refuse anything else.
+    if not url.startswith("https://"):
+        raise RuntimeError(f"Refusing to download non-https video URL: {url}")
+
     # Download the GIF
     try:
-        urllib.request.urlretrieve(url, out_gif)
+        with urllib.request.urlopen(
+            url, timeout=120
+        ) as response:  # nosec B310 (https enforced above)
+            with open(out_gif, "wb") as out_file:
+                shutil.copyfileobj(response, out_file)
     except urllib.error.HTTPError as e:
         # Read the error response body for more details
         error_body = ""
         if hasattr(e, "read"):
             try:
                 error_body = e.read().decode("utf-8", errors="ignore")
-            except Exception:
+            except (
+                Exception
+            ):  # nosec B110 (best-effort body extraction; we re-raise RuntimeError below)
                 pass
         raise RuntimeError(
             f"Failed to download video: HTTP {e.code} {e.reason}. "
@@ -1277,12 +1292,12 @@ def add_text_to_gif(
     # Try to load a font
     try:
         font = ImageFont.truetype("arial.ttf", font_size)
-    except:
+    except (OSError, IOError):
         try:
             font = ImageFont.truetype(
                 "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", font_size
             )
-        except:
+        except (OSError, IOError):
             font = ImageFont.load_default()
 
     for i in range(n_frames):
@@ -1339,7 +1354,7 @@ def gif_to_mp4(in_gif: str, out_mp4: str) -> bool:
     Returns:
         True if successful, False otherwise.
     """
-    import subprocess
+    import subprocess  # nosec B404 (ffmpeg invoked with validated list-form args)
     import shutil
 
     # Check if PIL is available
@@ -1386,7 +1401,9 @@ def gif_to_mp4(in_gif: str, out_mp4: str) -> bool:
     ]
 
     try:
-        subprocess.run(cmd, check=True)
+        subprocess.run(
+            cmd, check=True
+        )  # nosec B603 (cmd is built from validated ffmpeg path + fixed flags)
         return os.path.exists(out_mp4)
     except subprocess.CalledProcessError:
         return False
@@ -2155,7 +2172,7 @@ def create_modis_ndvi_timelapse(
                     "Dec",
                 ]
                 text_sequence.append(f"{months[month-1]} {day:02d}")
-            except:
+            except (ValueError, TypeError, IndexError):
                 text_sequence.append(t)
 
         add_text_to_gif(

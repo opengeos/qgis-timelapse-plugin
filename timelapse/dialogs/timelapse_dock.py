@@ -324,13 +324,15 @@ class TimelapseDockWidget(QDockWidget):
         self.progress_timer = None
         self.ee_initialized = False
 
-        self.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        self.setAllowedAreas(
+            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
+        )
         self.setMinimumWidth(400)
 
         # Create main widget with scroll area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         main_widget = QWidget()
         self.setup_ui(main_widget)
@@ -530,7 +532,9 @@ class TimelapseDockWidget(QDockWidget):
             saved_project = settings.value("QgisTimelapse/project_id", "", type=str)
             if saved_project:
                 self.gee_project_edit.setText(saved_project)
-        except Exception:
+        except (
+            Exception
+        ):  # nosec B110 (best-effort QSettings read; field stays empty on failure)
             pass
         gee_layout.addRow("Project ID:", self.gee_project_edit)
 

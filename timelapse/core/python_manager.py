@@ -11,7 +11,7 @@ Source: https://github.com/astral-sh/python-build-standalone
 import os
 import sys
 import platform
-import subprocess
+import subprocess  # nosec B404 (validated list-form calls only; see _run_subprocess)
 import tarfile
 import zipfile
 import tempfile
@@ -36,12 +36,12 @@ PYTHON_VERSIONS = {
 }
 
 
-def _log(message, level=Qgis.Info):
+def _log(message, level=Qgis.MessageLevel.Info):
     """Log a message to the QGIS message log.
 
     Args:
         message: The message to log.
-        level: The log level (Qgis.Info, Qgis.Warning, Qgis.Critical).
+        level: The log level (Qgis.MessageLevel.Info, Qgis.MessageLevel.Warning, Qgis.MessageLevel.Critical).
     """
     QgsMessageLog.logMessage(str(message), "Timelapse", level=level)
 
@@ -212,7 +212,7 @@ def download_python_standalone(progress_callback=None, cancel_check=None):
                 )
             else:
                 error_msg = f"Download failed: {error_msg}"
-            _log(error_msg, Qgis.Critical)
+            _log(error_msg, Qgis.MessageLevel.Critical)
             return False, error_msg
 
         if cancel_check and cancel_check():
@@ -253,7 +253,7 @@ def download_python_standalone(progress_callback=None, cancel_check=None):
         if success:
             if progress_callback:
                 progress_callback(100, f"Python {python_version} installed")
-            _log("Python standalone installed successfully", Qgis.Success)
+            _log("Python standalone installed successfully", Qgis.MessageLevel.Success)
             return True, f"Python {python_version} installed successfully"
         else:
             return False, f"Verification failed: {verify_msg}"
@@ -262,7 +262,7 @@ def download_python_standalone(progress_callback=None, cancel_check=None):
         return False, "Download cancelled"
     except Exception as e:
         error_msg = f"Installation failed: {str(e)}"
-        _log(error_msg, Qgis.Critical)
+        _log(error_msg, Qgis.MessageLevel.Critical)
 
         if sys.platform == "win32":
             error_lower = str(e).lower()
@@ -320,7 +320,7 @@ def verify_standalone_python():
             startupinfo.wShowWindow = subprocess.SW_HIDE
             kwargs["startupinfo"] = startupinfo
 
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B603 (list-form, fixed code, no shell)
             [python_path, "-c", "import sys; print(sys.version)"],
             capture_output=True,
             text=True,
@@ -334,14 +334,20 @@ def verify_standalone_python():
             if not version_output.startswith(
                 f"{sys.version_info.major}.{sys.version_info.minor}"
             ):
-                _log(f"Python version mismatch: got {version_output}", Qgis.Warning)
+                _log(
+                    f"Python version mismatch: got {version_output}",
+                    Qgis.MessageLevel.Warning,
+                )
                 return False, f"Version mismatch: {version_output}"
 
-            _log(f"Verified Python standalone: {version_output}", Qgis.Success)
+            _log(
+                f"Verified Python standalone: {version_output}",
+                Qgis.MessageLevel.Success,
+            )
             return True, f"Python {version_output} verified"
         else:
             error = result.stderr or "Unknown error"
-            _log(f"Python verification failed: {error}", Qgis.Warning)
+            _log(f"Python verification failed: {error}", Qgis.MessageLevel.Warning)
             return False, f"Verification failed: {error[:100]}"
 
     except subprocess.TimeoutExpired:
@@ -361,9 +367,9 @@ def remove_standalone_python():
 
     try:
         shutil.rmtree(STANDALONE_DIR)
-        _log("Removed standalone Python installation", Qgis.Success)
+        _log("Removed standalone Python installation", Qgis.MessageLevel.Success)
         return True, "Standalone Python removed"
     except Exception as e:
         error_msg = f"Failed to remove: {str(e)}"
-        _log(error_msg, Qgis.Warning)
+        _log(error_msg, Qgis.MessageLevel.Warning)
         return False, error_msg

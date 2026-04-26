@@ -10,7 +10,7 @@ import re
 import shutil
 import tempfile
 import zipfile
-from urllib.request import urlopen, urlretrieve
+from urllib.request import urlopen
 from urllib.error import URLError, HTTPError
 
 from qgis.PyQt.QtCore import Qt, QThread, pyqtSignal
@@ -35,6 +35,48 @@ PLUGIN_PATH = "timelapse"
 METADATA_URL = f"https://raw.githubusercontent.com/{GITHUB_REPO}/{GITHUB_BRANCH}/{PLUGIN_PATH}/metadata.txt"
 ZIP_URL = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/{GITHUB_BRANCH}.zip"
 
+DOWNLOAD_TIMEOUT = 30
+
+
+def _require_https(url):
+    """Reject any non-https URL before opening it.
+
+    Args:
+        url: The URL to validate.
+
+    Raises:
+        ValueError: If the URL does not use the https scheme.
+    """
+    if not url.startswith("https://"):
+        raise ValueError(f"Refusing to open non-https URL: {url}")
+
+
+def _download_to_file(url, dest_path, reporthook=None, timeout=DOWNLOAD_TIMEOUT):
+    """Download an https URL to a file with timeout and progress callback.
+
+    Args:
+        url: Source URL (must use https).
+        dest_path: Destination file path.
+        reporthook: Optional callable(block_num, block_size, total_size) for progress.
+        timeout: Socket timeout in seconds.
+    """
+    _require_https(url)
+    chunk_size = 8192
+    with urlopen(
+        url, timeout=timeout
+    ) as response:  # nosec B310 (https enforced by _require_https)
+        total_size = int(response.headers.get("Content-Length", 0))
+        block_num = 0
+        with open(dest_path, "wb") as out_file:
+            while True:
+                chunk = response.read(chunk_size)
+                if not chunk:
+                    break
+                out_file.write(chunk)
+                block_num += 1
+                if reporthook is not None:
+                    reporthook(block_num, chunk_size, total_size)
+
 
 class VersionCheckWorker(QThread):
     """Worker thread for checking the latest version from GitHub."""
@@ -45,7 +87,10 @@ class VersionCheckWorker(QThread):
     def run(self):
         """Fetch the latest metadata from GitHub."""
         try:
-            with urlopen(METADATA_URL, timeout=15) as response:
+            _require_https(METADATA_URL)
+            with urlopen(
+                METADATA_URL, timeout=15
+            ) as response:  # nosec B310 (https enforced by _require_https)
                 content = response.read().decode("utf-8")
 
             # Parse version from metadata
@@ -106,7 +151,7 @@ class DownloadWorker(QThread):
                     percent = min(int((downloaded / total_size) * 50), 50)
                     self.progress.emit(10 + percent, "Downloading...")
 
-            urlretrieve(ZIP_URL, zip_path, reporthook)
+            _download_to_file(ZIP_URL, zip_path, reporthook=reporthook)
 
             self.progress.emit(60, "Extracting files...")
 
@@ -232,7 +277,7 @@ class UpdateCheckerDialog(QDialog):
         header_font.setPointSize(14)
         header_font.setBold(True)
         header_label.setFont(header_font)
-        header_label.setAlignment(Qt.AlignCenter)
+        header_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(header_label)
 
         # Version info group
@@ -277,7 +322,7 @@ class UpdateCheckerDialog(QDialog):
         # Progress label
         self.progress_label = QLabel("")
         self.progress_label.setVisible(False)
-        self.progress_label.setAlignment(Qt.AlignCenter)
+        self.progress_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.progress_label)
 
         # Buttons
@@ -306,7 +351,7 @@ class UpdateCheckerDialog(QDialog):
         )
         info_label.setWordWrap(True)
         info_label.setOpenExternalLinks(True)
-        info_label.setAlignment(Qt.AlignCenter)
+        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(info_label)
 
     def check_for_updates(self):
@@ -397,11 +442,11 @@ class UpdateCheckerDialog(QDialog):
             f"This will download and install version {self.latest_version}.\n\n"
             "IMPORTANT: You will need to restart QGIS after the update completes.\n\n"
             "Do you want to continue?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
         )
 
-        if reply != QMessageBox.Yes:
+        if reply != QMessageBox.StandardButton.Yes:
             return
 
         self.check_btn.setEnabled(False)
@@ -482,10 +527,10 @@ class UpdateCheckerDialog(QDialog):
                 self,
                 "Download in Progress",
                 "A download is in progress. Are you sure you want to cancel?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
             )
-            if reply != QMessageBox.Yes:
+            if reply != QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
             self.download_worker.terminate()

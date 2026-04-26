@@ -251,15 +251,16 @@ class TimelapsePlugin:
                 f"  {missing_names}\n\n"
                 f"The Timelapse plugin needs these packages to function.\n\n"
                 f"Would you like to open Settings to install them?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes,
             )
 
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.StandardButton.Yes:
                 self._open_settings_deps_tab()
 
-        except Exception:
-            # Don't let dependency check errors prevent other actions
+        # Reason: dependency check is advisory; a failure here must never
+        # interrupt the rest of the plugin's startup or user actions.
+        except Exception:  # nosec B110
             pass
 
     def _open_settings_deps_tab(self):
@@ -275,7 +276,9 @@ class TimelapsePlugin:
                 self._settings_dock.visibilityChanged.connect(
                     self._on_settings_visibility_changed
                 )
-                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self.iface.addDockWidget(
+                    Qt.DockWidgetArea.RightDockWidgetArea, self._settings_dock
+                )
                 self._connect_deps_signal()
             except Exception as e:
                 QMessageBox.critical(
@@ -338,7 +341,9 @@ class TimelapsePlugin:
                 self._settings_dock.visibilityChanged.connect(
                     self._on_settings_visibility_changed
                 )
-                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self.iface.addDockWidget(
+                    Qt.DockWidgetArea.RightDockWidgetArea, self._settings_dock
+                )
                 self._connect_deps_signal()
             except Exception as e:
                 QMessageBox.critical(
@@ -391,7 +396,7 @@ class TimelapsePlugin:
                     QgsMessageLog.logMessage(
                         f"Auto-initializing Earth Engine with project: {project_id}",
                         "Timelapse",
-                        Qgis.Info,
+                        Qgis.MessageLevel.Info,
                     )
                     initialize_ee(project=project_id)
                 except Exception as exc:
@@ -400,7 +405,7 @@ class TimelapsePlugin:
                     QgsMessageLog.logMessage(
                         f"Auto-init EE failed: {exc}",
                         "Timelapse",
-                        Qgis.Warning,
+                        Qgis.MessageLevel.Warning,
                     )
         except ImportError:
             pass
@@ -427,7 +432,9 @@ class TimelapsePlugin:
                 self._timelapse_dock.visibilityChanged.connect(
                     self._on_timelapse_visibility_changed
                 )
-                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._timelapse_dock)
+                self.iface.addDockWidget(
+                    Qt.DockWidgetArea.RightDockWidgetArea, self._timelapse_dock
+                )
                 self._timelapse_dock.show()
                 self._timelapse_dock.raise_()
                 return
@@ -469,7 +476,9 @@ class TimelapsePlugin:
                 self._settings_dock.visibilityChanged.connect(
                     self._on_settings_visibility_changed
                 )
-                self.iface.addDockWidget(Qt.RightDockWidgetArea, self._settings_dock)
+                self.iface.addDockWidget(
+                    Qt.DockWidgetArea.RightDockWidgetArea, self._settings_dock
+                )
                 self._settings_dock.show()
                 self._settings_dock.raise_()
                 self._connect_deps_signal()
@@ -505,7 +514,7 @@ class TimelapsePlugin:
             from .dialogs.about_dialog import AboutDialog
 
             dialog = AboutDialog(self.plugin_dir, self.iface.mainWindow())
-            dialog.exec_()
+            dialog.exec()
         except Exception:
             # Fallback to simple message box
             version = self._get_version()
@@ -552,7 +561,7 @@ class TimelapsePlugin:
 
         try:
             dialog = UpdateCheckerDialog(self.plugin_dir, self.iface.mainWindow())
-            dialog.exec_()
+            dialog.exec()
         except Exception as e:
             QMessageBox.critical(
                 self.iface.mainWindow(),

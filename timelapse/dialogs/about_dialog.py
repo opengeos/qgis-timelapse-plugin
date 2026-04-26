@@ -67,7 +67,12 @@ class AboutDialog(QDialog):
             pixmap = QPixmap(icon_path)
             if not pixmap.isNull():
                 icon_label.setPixmap(
-                    pixmap.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                    pixmap.scaled(
+                        64,
+                        64,
+                        Qt.AspectRatioMode.KeepAspectRatio,
+                        Qt.TransformationMode.SmoothTransformation,
+                    )
                 )
                 header_layout.addWidget(icon_label)
 
@@ -169,7 +174,7 @@ seasonal variations, and more from various satellite data sources.</p>
             "<p style='color: gray; text-align: center;'>"
             "Licensed under the MIT License</p>"
         )
-        license_label.setAlignment(Qt.AlignCenter)
+        license_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(license_label)
 
         # Close button
