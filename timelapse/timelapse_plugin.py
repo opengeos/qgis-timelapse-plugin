@@ -8,6 +8,7 @@ integration, menu items, toolbar buttons, and dockable panels.
 import os
 import re
 
+from qgis.core import Qgis, QgsMessageLog
 from qgis.PyQt.QtCore import Qt, QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMenu, QToolBar, QMessageBox
@@ -211,8 +212,9 @@ class TimelapsePlugin:
     def _ensure_deps(self) -> bool:
         """Check if dependencies are installed and loaded.
 
-        Returns True if deps are ready. If not, shows a non-blocking
-        warning and offers to open Settings -> Dependencies tab.
+        Returns True if deps are ready. If not, opens Settings on the
+        Dependencies tab and shows a message bar so the user is never
+        left wondering why "Create Timelapse" did nothing.
 
         Returns:
             True if dependencies are ready and loaded, False otherwise.
@@ -223,45 +225,49 @@ class TimelapsePlugin:
         from .core.venv_manager import ensure_venv_packages_available, get_venv_status
 
         is_ready, status_msg = get_venv_status()
+        QgsMessageLog.logMessage(
+            f"_ensure_deps: get_venv_status -> ({is_ready}, {status_msg!r})",
+            "Timelapse",
+            Qgis.MessageLevel.Info,
+        )
 
-        if is_ready:
-            if ensure_venv_packages_available():
-                self._deps_ready = True
-                self._post_deps_init()
-                return True
+        if is_ready and ensure_venv_packages_available():
+            self._deps_ready = True
+            self._post_deps_init()
+            return True
 
-        # Dependencies not ready -- show non-blocking warning
-        self._check_dependencies_on_open()
+        self._prompt_install_dependencies(status_msg)
         return False
 
-    def _check_dependencies_on_open(self):
-        """Check if dependencies are installed and prompt if missing."""
+    def _prompt_install_dependencies(self, status_msg):
+        """Route the user to Settings -> Dependencies when deps are missing.
+
+        Always visible: pushes a warning to the QGIS message bar, logs the
+        same message to the Timelapse log channel, opens the Settings dock
+        on the Dependencies tab, and un-checks the Timelapse toolbar action.
+
+        Args:
+            status_msg: The status string returned by get_venv_status().
+        """
+        message = (
+            f"Dependencies not installed ({status_msg}). "
+            f"Opening Settings → Dependencies."
+        )
+        QgsMessageLog.logMessage(message, "Timelapse", Qgis.MessageLevel.Warning)
         try:
-            from .core.venv_manager import check_dependencies
-
-            all_ok, missing, _installed = check_dependencies()
-            if all_ok:
-                return
-
-            missing_names = ", ".join(name for name, _ in missing)
-            reply = QMessageBox.warning(
-                self.iface.mainWindow(),
-                "Missing Dependencies",
-                f"The following required packages are not installed:\n\n"
-                f"  {missing_names}\n\n"
-                f"The Timelapse plugin needs these packages to function.\n\n"
-                f"Would you like to open Settings to install them?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.Yes,
+            self.iface.messageBar().pushWarning("Timelapse", message)
+        except Exception as exc:
+            # Message bar is best-effort UX; do not block the Settings open path.
+            QgsMessageLog.logMessage(
+                f"messageBar().pushWarning failed: {exc}",
+                "Timelapse",
+                Qgis.MessageLevel.Warning,
             )
 
-            if reply == QMessageBox.StandardButton.Yes:
-                self._open_settings_deps_tab()
+        if hasattr(self, "timelapse_action") and self.timelapse_action is not None:
+            self.timelapse_action.setChecked(False)
 
-        # Reason: dependency check is advisory; a failure here must never
-        # interrupt the rest of the plugin's startup or user actions.
-        except Exception:  # nosec B110
-            pass
+        self._open_settings_deps_tab()
 
     def _open_settings_deps_tab(self):
         """Open the Settings dock and switch to the Dependencies tab."""
