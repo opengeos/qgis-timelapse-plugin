@@ -10,6 +10,7 @@ import importlib
 import importlib.metadata
 import os
 import platform
+import re
 import shutil
 import subprocess  # nosec B404 (validated list-form calls only; commands are pinned, not user input)
 import sys
@@ -27,6 +28,12 @@ REQUIRED_PACKAGES = [
     ("Pillow", ""),
     ("google-auth-oauthlib", ""),
 ]
+
+PACKAGE_IMPORT_DIRS = {
+    "earthengine-api": ("ee",),
+    "Pillow": ("PIL",),
+    "google-auth-oauthlib": ("google_auth_oauthlib",),
+}
 
 
 def _log(message, level=Qgis.MessageLevel.Info):
@@ -210,6 +217,56 @@ def venv_exists(venv_dir=None):
         True if the venv Python executable exists.
     """
     return os.path.exists(get_venv_python_path(venv_dir))
+
+
+def _normalize_distribution_name(name):
+    """Normalize a Python distribution name for case-insensitive comparison."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _get_installed_version_from_site_packages(package_name, site_packages):
+    """Return an installed distribution version from a specific site-packages path."""
+    normalized_name = _normalize_distribution_name(package_name)
+    for distribution in importlib.metadata.distributions(path=[site_packages]):
+        distribution_name = distribution.metadata.get("Name")
+        if (
+            distribution_name
+            and _normalize_distribution_name(distribution_name) == normalized_name
+        ):
+            return distribution.version
+    return None
+
+
+def _package_exists_in_site_packages(package_name, site_packages):
+    """Check whether a package appears to be installed in site-packages.
+
+    Prefer distribution metadata. Fall back to import package directories for
+    packages whose distribution name differs from their import name, such as
+    Pillow -> PIL.
+    """
+    if _get_installed_version_from_site_packages(package_name, site_packages):
+        return True
+
+    import_dirs = PACKAGE_IMPORT_DIRS.get(
+        package_name, (package_name.replace("-", "_"),)
+    )
+    for import_dir in import_dirs:
+        if os.path.exists(os.path.join(site_packages, import_dir)):
+            return True
+
+    normalized_name = _normalize_distribution_name(package_name)
+    try:
+        entries = os.listdir(site_packages)
+    except OSError:
+        return False
+
+    return any(
+        entry.endswith((".dist-info", ".egg-info"))
+        and _normalize_distribution_name(entry.rsplit(".", 1)[0]).startswith(
+            f"{normalized_name}-"
+        )
+        for entry in entries
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -985,21 +1042,12 @@ def get_venv_status():
     if not venv_exists():
         return False, "Virtual environment not configured"
 
-    # Quick filesystem check for packages
     site_packages = get_venv_site_packages()
     if site_packages is None:
         return False, "Virtual environment incomplete"
 
     for package_name, _ in REQUIRED_PACKAGES:
-        pkg_dir = os.path.join(site_packages, package_name.replace("-", "_"))
-        dist_info_pattern = package_name.replace("-", "_")
-        has_pkg = os.path.exists(pkg_dir)
-        has_dist = any(
-            entry.startswith(dist_info_pattern) and entry.endswith(".dist-info")
-            for entry in os.listdir(site_packages)
-        )
-
-        if not has_pkg and not has_dist:
+        if not _package_exists_in_site_packages(package_name, site_packages):
             return False, f"Package {package_name} not found in venv"
 
     return True, "Virtual environment ready"
@@ -1008,8 +1056,8 @@ def get_venv_status():
 def check_dependencies():
     """Check if all required packages are installed and importable.
 
-    Attempts to use importlib.metadata after ensuring venv packages
-    are on sys.path. This is a lightweight check suitable for UI display.
+    Reads package metadata from the plugin venv site-packages path. This is a
+    lightweight check suitable for UI display.
 
     Returns:
         A tuple of (all_ok, missing, installed) where:
@@ -1017,16 +1065,22 @@ def check_dependencies():
             missing: List of (package_name, version_spec) for missing packages.
             installed: List of (package_name, version_string) for installed packages.
     """
+    site_packages = get_venv_site_packages()
+    if site_packages is None:
+        return False, REQUIRED_PACKAGES.copy(), []
+
     ensure_venv_packages_available()
 
     missing = []
     installed = []
 
     for package_name, version_spec in REQUIRED_PACKAGES:
-        try:
-            version = importlib.metadata.version(package_name)
+        version = _get_installed_version_from_site_packages(package_name, site_packages)
+        if version:
             installed.append((package_name, version))
-        except importlib.metadata.PackageNotFoundError:
+        elif _package_exists_in_site_packages(package_name, site_packages):
+            installed.append((package_name, "unknown"))
+        else:
             missing.append((package_name, version_spec))
 
     all_ok = len(missing) == 0
