@@ -130,6 +130,38 @@ def test_successful_init_clears_error(monkeypatch, tmp_path):
     assert timelapse_core.is_ee_initialized() is True
 
 
+def test_initialize_does_not_pass_credentials_kwarg(monkeypatch, tmp_path):
+    """Regression for issue #49 round 2.
+
+    Building a ``google.oauth2`` ``Credentials`` object from the EE
+    credentials file passed ``client_id=None``/``client_secret=None``
+    when those fields were absent (modern ``ee.Authenticate()`` files
+    only contain ``refresh_token``), causing ``RefreshError: The
+    credentials do not contain the necessary fields``. Pinning the
+    contract: ``ee.Initialize`` is called WITHOUT a ``credentials`` kwarg
+    so ee's own discovery path runs.
+    """
+    monkeypatch.setattr(
+        os.path,
+        "expanduser",
+        lambda p: str(tmp_path / "creds") if "earthengine" in p else p,
+    )
+
+    received_kwargs: dict = {}
+
+    def init_recording(**kwargs):
+        received_kwargs.update(kwargs)
+
+    _install_fake_ee(monkeypatch, initialize=init_recording)
+
+    assert timelapse_core.initialize_ee(project="my-proj") is True
+    assert "credentials" not in received_kwargs, (
+        "initialize_ee must not pass a manually built credentials object; "
+        "ee.Initialize handles credential discovery itself."
+    )
+    assert received_kwargs.get("project") == "my-proj"
+
+
 def test_mark_ee_initialized_helper(monkeypatch):
     """The Settings dock helper toggles the flag and clears the error."""
     monkeypatch.setattr(timelapse_core, "_last_init_error", "stale error")

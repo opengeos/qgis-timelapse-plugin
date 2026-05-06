@@ -85,64 +85,17 @@ def reload_dependencies() -> Dict[str, bool]:
     return check_dependencies()
 
 
-def _load_ee_credentials():
-    """Load Earth Engine OAuth2 credentials from the credentials file.
-
-    Reads ``~/.config/earthengine/credentials`` and builds a
-    ``google.oauth2.credentials.Credentials`` object that can be passed
-    to ``ee.Initialize()``.  This is more reliable than relying on
-    ``ee``'s built-in auto-discovery inside the QGIS process, where
-    bundled library versions may conflict with the venv packages.
-
-    Side effect:
-        On failure, records a description into the module-level
-        ``_last_init_error`` so callers can surface the real cause
-        instead of a generic "auth failed" message.
-
-    Returns:
-        A ``google.oauth2.credentials.Credentials`` instance, or *None*
-        if the file does not exist or cannot be parsed.
-    """
-    global _last_init_error
-
-    cred_path = os.path.expanduser("~/.config/earthengine/credentials")
-    if not os.path.exists(cred_path):
-        _last_init_error = (
-            f"Earth Engine credentials file not found at {cred_path}. "
-            "Open Settings → Earth Engine and click "
-            "'Authenticate (opens browser)'."
-        )
-        return None
-
-    try:
-        with open(cred_path) as f:
-            data = json.load(f)
-
-        refresh_token = data.get("refresh_token")
-        if not refresh_token:
-            _last_init_error = (
-                f"Credentials file at {cred_path} is missing a refresh_token. "
-                "Re-authenticate via Settings → Earth Engine."
-            )
-            return None
-
-        from google.oauth2.credentials import Credentials
-
-        return Credentials(
-            token=None,
-            refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token",  # nosec B106 (public Google OAuth2 endpoint, not a secret)
-            client_id=data.get("client_id"),
-            client_secret=data.get("client_secret"),
-        )
-    except Exception as e:
-        _last_init_error = (
-            f"Failed to load credentials from {cred_path}: {e!r}. "
-            "If this mentions 'google.oauth2', the plugin's venv "
-            "dependencies may not be on sys.path; reopen QGIS or "
-            "reinstall via Settings → Dependencies."
-        )
-        return None
+# NOTE: We deliberately do not build a ``google.oauth2.credentials.Credentials``
+# object ourselves. An earlier version of this module did so to "avoid
+# bundled library version conflicts inside QGIS", but the resulting
+# Credentials object passed ``client_id=None``/``client_secret=None`` when
+# the credentials file omitted them — and modern ``ee.Authenticate()``
+# writes files with only a ``refresh_token`` because ee supplies its own
+# client_id/client_secret constants at refresh time. That mismatch surfaced
+# as ``RefreshError: The credentials do not contain the necessary fields``
+# on issue #49. Letting ``ee.Initialize()`` handle credential discovery
+# itself avoids the issue entirely and matches what every other ee client
+# does.
 
 
 def get_ee_project() -> Optional[str]:
@@ -255,16 +208,11 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
         if not project:
             project = get_ee_project()
 
-    # Load credentials from disk (more reliable than ee's auto-discovery
-    # inside QGIS due to bundled library version conflicts).
-    # _load_ee_credentials() sets _last_init_error itself on failure.
-    credentials = _load_ee_credentials()
-
     try:
         if project:
-            ee.Initialize(credentials=credentials, project=project)
+            ee.Initialize(project=project)
         else:
-            ee.Initialize(credentials=credentials)
+            ee.Initialize()
         _ee_initialized = True
         _last_init_error = None
         return True
@@ -313,10 +261,8 @@ def try_auto_initialize_ee() -> bool:
     if not project:
         return False
 
-    credentials = _load_ee_credentials()
-
     try:
-        ee.Initialize(credentials=credentials, project=project)
+        ee.Initialize(project=project)
         _ee_initialized = True
         return True
     except Exception:
