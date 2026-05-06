@@ -3,7 +3,7 @@ name=Timelapse
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
-version=0.10.5
+version=0.10.6
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
@@ -33,6 +33,9 @@ experimental=False
 deprecated=False
 
 changelog=
+    0.10.6:
+        - Shrink the timelapse dock's tab area to the current tab's content so the AOI / Output / Style tabs no longer leave a visible gap above the Progress section
+        - Reorder Settings -> Earth Engine actions so Authenticate appears above Initialize
     0.10.5:
         - Use ee.Authenticate(auth_mode='localhost:0') so the OAuth callback binds a kernel-assigned port instead of the default 8085, fixing "Address already in use" auth failures (#49)
     0.10.4:
