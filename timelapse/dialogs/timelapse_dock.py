@@ -59,6 +59,9 @@ class TimelapseWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(str, dict)  # path, params (including bbox)
     error = pyqtSignal(str)
+    # Emitted after `error` when the failure is an EE init/auth problem
+    # the user can fix by opening Settings → Earth Engine.
+    request_open_ee_settings = pyqtSignal()
 
     def __init__(self, params):
         super().__init__()
@@ -88,9 +91,13 @@ class TimelapseWorker(QThread):
                         return
 
                 if not timelapse_core.initialize_ee(project_id):
-                    self.error.emit(
-                        "Failed to initialize Google Earth Engine. Please authenticate first."
+                    detail = timelapse_core.get_last_init_error() or (
+                        "Earth Engine initialization failed for an unknown " "reason."
                     )
+                    self.error.emit(
+                        "Failed to initialize Google Earth Engine.\n\n" f"{detail}"
+                    )
+                    self.request_open_ee_settings.emit()
                     return
 
             self.progress.emit(f"Creating {imagery_type} timelapse...")
@@ -312,6 +319,10 @@ class TimelapseDockWidget(QDockWidget):
     """Dockable widget for timelapse configuration."""
 
     closed = pyqtSignal()
+    # Re-emitted from the worker so the plugin can open the Settings
+    # dock on the Earth Engine tab when init/auth is the cause of a
+    # failed run.
+    request_open_ee_settings = pyqtSignal()
 
     def __init__(self, iface, parent=None):
         super().__init__("Timelapse Animation Creator", parent)
@@ -1463,6 +1474,7 @@ class TimelapseDockWidget(QDockWidget):
         self.worker.progress.connect(self.log)
         self.worker.finished.connect(self.on_timelapse_finished)
         self.worker.error.connect(self.on_timelapse_error)
+        self.worker.request_open_ee_settings.connect(self.request_open_ee_settings)
 
         self.run_button.setEnabled(False)
         self.progress_bar.setRange(0, 100)

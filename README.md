@@ -358,15 +358,14 @@ The plugin includes a built-in update checker:
 
 **"Failed to initialize Google Earth Engine"**
 
-- Ensure you have an active Earth Engine account
-- Log in to your Earth Engine account at <https://code.earthengine.google.com> to get your Project ID
-- Open the QGIS Python Console (QGIS -> Plugins -> Python Console) and run the following Python code to authenticate and initialize Earth Engine. Make sure to replace `your-ee-project` with your actual Earth Engine Project ID.
-
-```python
-import ee
-ee.Authenticate()
-ee.Initialize(project="your-ee-project")
-```
+- Ensure you have an active Earth Engine account.
+- Log in to your Earth Engine account at <https://code.earthengine.google.com> to get your Project ID.
+- The plugin installs its dependencies into an isolated virtual environment at `~/.qgis_timelapse` (Linux/macOS) or `%USERPROFILE%\.qgis_timelapse` (Windows), so running `earthengine authenticate` from a different Python on your system may not be enough. Authenticate from inside the plugin instead:
+    1. Open the **Timelapse Settings** panel (Plugins → Timelapse → Settings).
+    2. Switch to the **Earth Engine** tab.
+    3. Enter your Project ID, then click **Authenticate (opens browser)** and complete the sign-in.
+    4. Click **Initialize Earth Engine**. A successful init now also runs a small test request, so any project-level issues (Earth Engine API not enabled, missing scopes, unregistered account) are reported here rather than later when you start a run.
+- If a run still fails, the error message in the timelapse log now includes the underlying exception text. That message is your fastest path to a fix.
 
 ![](https://github.com/user-attachments/assets/a7321180-1261-4c82-b545-9dbe676a864c)
 

@@ -358,15 +358,15 @@ class TimelapsePlugin:
                     f"Failed to create Settings panel:\n{str(e)}",
                 )
                 return
-        else:
-            self._settings_dock.show()
-            self._settings_dock.raise_()
-        if self._settings_dock is not None:
-            self._settings_dock.show_ee_tab()
-            self.iface.messageBar().pushInfo(
-                "Timelapse",
-                "Please enter your Google Cloud project ID and click Save Settings.",
-            )
+
+        self._settings_dock.show()
+        self._settings_dock.raise_()
+        self.settings_action.setChecked(True)
+        self._settings_dock.show_ee_tab()
+        self.iface.messageBar().pushInfo(
+            "Timelapse",
+            "Please enter your Google Cloud project ID and click Save Settings.",
+        )
 
     def _post_deps_init(self):
         """One-time initialization after dependencies are confirmed ready."""
@@ -437,6 +437,9 @@ class TimelapsePlugin:
                 self._timelapse_dock.setObjectName("TimelapseDock")
                 self._timelapse_dock.visibilityChanged.connect(
                     self._on_timelapse_visibility_changed
+                )
+                self._timelapse_dock.request_open_ee_settings.connect(
+                    self._show_settings_ee_tab
                 )
                 self.iface.addDockWidget(
                     Qt.DockWidgetArea.RightDockWidgetArea, self._timelapse_dock
