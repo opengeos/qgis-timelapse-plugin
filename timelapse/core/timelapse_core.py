@@ -94,12 +94,24 @@ def _load_ee_credentials():
     ``ee``'s built-in auto-discovery inside the QGIS process, where
     bundled library versions may conflict with the venv packages.
 
+    Side effect:
+        On failure, records a description into the module-level
+        ``_last_init_error`` so callers can surface the real cause
+        instead of a generic "auth failed" message.
+
     Returns:
         A ``google.oauth2.credentials.Credentials`` instance, or *None*
         if the file does not exist or cannot be parsed.
     """
+    global _last_init_error
+
     cred_path = os.path.expanduser("~/.config/earthengine/credentials")
     if not os.path.exists(cred_path):
+        _last_init_error = (
+            f"Earth Engine credentials file not found at {cred_path}. "
+            "Open Settings → Earth Engine and click "
+            "'Authenticate (opens browser)'."
+        )
         return None
 
     try:
@@ -108,6 +120,10 @@ def _load_ee_credentials():
 
         refresh_token = data.get("refresh_token")
         if not refresh_token:
+            _last_init_error = (
+                f"Credentials file at {cred_path} is missing a refresh_token. "
+                "Re-authenticate via Settings → Earth Engine."
+            )
             return None
 
         from google.oauth2.credentials import Credentials
@@ -119,7 +135,13 @@ def _load_ee_credentials():
             client_id=data.get("client_id"),
             client_secret=data.get("client_secret"),
         )
-    except Exception:
+    except Exception as e:
+        _last_init_error = (
+            f"Failed to load credentials from {cred_path}: {e!r}. "
+            "If this mentions 'google.oauth2', the plugin's venv "
+            "dependencies may not be on sys.path; reopen QGIS or "
+            "reinstall via Settings → Dependencies."
+        )
         return None
 
 
@@ -135,6 +157,11 @@ def get_ee_project() -> Optional[str]:
 # Global flag to track if EE has been initialized
 _ee_initialized = False
 
+# Description of the most recent initialize_ee() failure, surfaced by
+# get_last_init_error() so the UI can show a real diagnostic instead
+# of a generic "please authenticate" message.
+_last_init_error: Optional[str] = None
+
 
 def is_ee_initialized() -> bool:
     """Check if Earth Engine has been initialized.
@@ -146,8 +173,50 @@ def is_ee_initialized() -> bool:
     return _ee_initialized
 
 
+def mark_ee_initialized(value: bool = True) -> None:
+    """Set the cached "EE has been initialized" flag.
+
+    The Settings dock initializes ``ee`` directly (so it can use a
+    service-account credentials file the core's own loader does not
+    handle). Without this, the worker thread would re-run
+    :func:`initialize_ee` and clobber the dialog's state. Callers should
+    invoke this after a successful direct ``ee.Initialize()`` so
+    :func:`is_ee_initialized` reflects reality.
+
+    Args:
+        value: New value for the flag. Passing ``True`` also clears
+            ``_last_init_error``.
+    """
+    global _ee_initialized, _last_init_error
+    _ee_initialized = value
+    if value:
+        _last_init_error = None
+
+
+def get_last_init_error() -> Optional[str]:
+    """Return the most recent ``initialize_ee()`` failure description.
+
+    The string is set whenever ``initialize_ee()`` returns ``False`` and
+    cleared on a successful initialization. Use this to surface the
+    actual root cause to the user instead of a hard-coded generic
+    message.
+
+    Returns:
+        A human-readable description of the last failure, or ``None`` if
+        the most recent ``initialize_ee()`` call succeeded (or has not
+        been called).
+    """
+    return _last_init_error
+
+
 def initialize_ee(project: str = None, force: bool = False) -> bool:
     """Initialize Google Earth Engine.
+
+    On failure, records a description of the cause into the module-level
+    ``_last_init_error`` (retrievable via :func:`get_last_init_error`).
+    Does **not** call ``ee.Authenticate()`` itself; authentication is
+    driven by the Settings dock, which runs it in a dedicated worker so
+    the timelapse worker thread never blocks on a browser flow.
 
     Args:
         project: GEE project ID. If None, reads from QSettings then
@@ -157,13 +226,18 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
     Returns:
         True if initialization successful, False otherwise.
     """
-    global _ee_initialized
+    global _ee_initialized, _last_init_error
 
     if ee is None:
+        _last_init_error = (
+            "earthengine-api is not loaded. Open Settings → Dependencies "
+            "and click Install, then restart QGIS if prompted."
+        )
         return False
 
     # Skip if already initialized (unless forced)
     if _ee_initialized and not force:
+        _last_init_error = None
         return True
 
     # Use provided project or fall back to QSettings / env variable
@@ -182,7 +256,8 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
             project = get_ee_project()
 
     # Load credentials from disk (more reliable than ee's auto-discovery
-    # inside QGIS due to bundled library version conflicts)
+    # inside QGIS due to bundled library version conflicts).
+    # _load_ee_credentials() sets _last_init_error itself on failure.
     credentials = _load_ee_credentials()
 
     try:
@@ -191,18 +266,16 @@ def initialize_ee(project: str = None, force: bool = False) -> bool:
         else:
             ee.Initialize(credentials=credentials)
         _ee_initialized = True
+        _last_init_error = None
         return True
-    except Exception:
-        try:
-            ee.Authenticate()
-            if project:
-                ee.Initialize(credentials=credentials, project=project)
-            else:
-                ee.Initialize(credentials=credentials)
-            _ee_initialized = True
-            return True
-        except Exception:
-            return False
+    except Exception as e:
+        project_desc = f"project={project!r}" if project else "no project"
+        _last_init_error = (
+            f"ee.Initialize({project_desc}) failed: {e!r}. "
+            "Open Settings → Earth Engine, click 'Initialize Earth Engine' "
+            "to retest, then 'Authenticate (opens browser)' if needed."
+        )
+        return False
 
 
 def try_auto_initialize_ee() -> bool:

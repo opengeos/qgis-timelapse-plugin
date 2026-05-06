@@ -438,6 +438,9 @@ class TimelapsePlugin:
                 self._timelapse_dock.visibilityChanged.connect(
                     self._on_timelapse_visibility_changed
                 )
+                self._timelapse_dock.request_open_ee_settings.connect(
+                    self._show_settings_ee_tab
+                )
                 self.iface.addDockWidget(
                     Qt.DockWidgetArea.RightDockWidgetArea, self._timelapse_dock
                 )

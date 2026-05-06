@@ -401,13 +401,6 @@ class SettingsDockWidget(QDockWidget):
                 )
 
             ee.Initialize(credentials=credentials, project=project)
-
-            self.ee_status_label.setText("Status: Initialized")
-            self.ee_status_label.setStyleSheet("color: green;")
-            self.iface.messageBar().pushSuccess(
-                "Timelapse", "Earth Engine initialized successfully!"
-            )
-
         except Exception as e:
             self.ee_status_label.setText("Status: Error")
             self.ee_status_label.setStyleSheet("color: red;")
@@ -416,6 +409,40 @@ class SettingsDockWidget(QDockWidget):
                 "Initialization Error",
                 f"Failed to initialize Earth Engine:\n\n{str(e)}",
             )
+            return
+
+        # Verify the connection with a tiny round-trip. ee.Initialize() is
+        # often happy even when the project lacks the Earth Engine API or
+        # the credentials are missing scopes; the failure only shows up
+        # on the first real call. Catch that here so the user learns now,
+        # not when they hit "Create Timelapse".
+        try:
+            ee.Number(1).getInfo()
+        except Exception as e:
+            self.ee_status_label.setText("Status: Error")
+            self.ee_status_label.setStyleSheet("color: red;")
+            QMessageBox.critical(
+                self,
+                "Earth Engine Verification Failed",
+                "Initialize succeeded but a test request failed:\n\n"
+                f"{str(e)}\n\n"
+                "Common causes: the Earth Engine API is not enabled for "
+                f"project '{project}', the account is not registered, or "
+                "the credentials are missing the required scopes.",
+            )
+            return
+
+        # Keep timelapse_core's cached flag in sync so the worker thread
+        # does not re-run initialize_ee() and clobber this dialog's state.
+        from ..core import timelapse_core
+
+        timelapse_core.mark_ee_initialized(True)
+
+        self.ee_status_label.setText("Status: Initialized & verified")
+        self.ee_status_label.setStyleSheet("color: green; font-weight: bold;")
+        self.iface.messageBar().pushSuccess(
+            "Timelapse", "Earth Engine initialized successfully!"
+        )
 
     def _authenticate_ee(self):
         """Start Earth Engine authentication in the background."""
