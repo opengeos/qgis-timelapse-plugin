@@ -379,6 +379,13 @@ class TimelapseDockWidget(QDockWidget):
         vis_tab = self.create_visualization_tab()
         self.tabs.addTab(vis_tab, "Style")
 
+        # Without this, QTabWidget sizes to its tallest tab, leaving a
+        # large gap between the active tab's content and the Progress
+        # section below when a shorter tab (AOI / Output / Style) is
+        # selected. Setting Ignored on hidden tabs lets the QTabWidget
+        # shrink to the current tab's preferred height.
+        self.tabs.currentChanged.connect(self._on_tab_changed)
+
         layout.addWidget(self.tabs)
 
         # Initialize imagery options after all tabs are created
@@ -431,6 +438,32 @@ class TimelapseDockWidget(QDockWidget):
         button_layout.addWidget(self.cancel_button, 1)
 
         layout.addLayout(button_layout)
+
+        # Apply the tab-size-fits-content policy now that all tabs exist.
+        self._on_tab_changed(self.tabs.currentIndex())
+
+    def _on_tab_changed(self, index: int) -> None:
+        """Shrink the tab widget to the current tab's preferred height.
+
+        QTabWidget's default size hint is the maximum of all tab pages,
+        so a short tab leaves a visible gap between its content and the
+        Progress section below. Marking hidden tabs with an Ignored size
+        policy excludes them from the size hint calculation; the active
+        tab keeps Preferred so it sizes to its content.
+        """
+        for i in range(self.tabs.count()):
+            page = self.tabs.widget(i)
+            if page is None:
+                continue
+            policy = (
+                QSizePolicy.Policy.Preferred
+                if i == index
+                else QSizePolicy.Policy.Ignored
+            )
+            page.setSizePolicy(policy, policy)
+        active = self.tabs.widget(index)
+        if active is not None:
+            active.adjustSize()
 
     def create_aoi_tab(self):
         """Create the Area of Interest tab."""

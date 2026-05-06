@@ -331,15 +331,16 @@ class SettingsDockWidget(QDockWidget):
         actions_group = QGroupBox("Actions")
         actions_layout = QVBoxLayout(actions_group)
 
+        # Authenticate button (above Initialize: users typically need to
+        # authenticate before they can initialize, so put that step first).
+        auth_btn = QPushButton("Authenticate (opens browser)")
+        auth_btn.clicked.connect(self._authenticate_ee)
+        actions_layout.addWidget(auth_btn)
+
         # Initialize button
         init_btn = QPushButton("Initialize Earth Engine")
         init_btn.clicked.connect(self._initialize_ee)
         actions_layout.addWidget(init_btn)
-
-        # Authenticate button
-        auth_btn = QPushButton("Authenticate (opens browser)")
-        auth_btn.clicked.connect(self._authenticate_ee)
-        actions_layout.addWidget(auth_btn)
 
         # Status
         self.ee_status_label = QLabel("Status: Not initialized")
