@@ -1451,12 +1451,17 @@ def authenticate_ee(
     env = _get_clean_env_for_venv()
     kwargs = _get_subprocess_kwargs()
 
-    auth_code = "import ee; ee.Authenticate()"
+    # Force auth_mode='localhost' so we don't fall back to ee's default
+    # ('gcloud'), which requires the Google Cloud SDK to be installed and
+    # on PATH. 'localhost' opens a browser and runs a tiny callback server
+    # in the venv subprocess — works on a plain QGIS install with no
+    # extra tooling.
+    auth_code = "import ee; ee.Authenticate(auth_mode='localhost')"
 
     if progress_callback:
         progress_callback(50, "Waiting for browser authentication...")
 
-    _log("Running ee.Authenticate() in venv...")
+    _log("Running ee.Authenticate(auth_mode='localhost') in venv...")
 
     try:
         result = subprocess.run(  # nosec B603
@@ -1475,10 +1480,20 @@ def authenticate_ee(
             return True, "Earth Engine authentication completed successfully"
         else:
             error = result.stderr or result.stdout or "Unknown error"
-            _log(f"EE authentication failed: {error[:200]}", Qgis.MessageLevel.Warning)
-            return False, f"Authentication failed: {error[:200]}"
+            # Log the *full* error so users (and #49-style bug reports)
+            # can see the real traceback. The user-facing return value
+            # stays compact for the message bar, with the log channel as
+            # the source of truth.
+            _log(
+                f"EE authentication failed:\n{error}",
+                Qgis.MessageLevel.Warning,
+            )
+            return False, (
+                f"Authentication failed: {error[:500]}"
+                "\n\n(Full traceback in the QGIS Message Log → Timelapse channel.)"
+            )
 
     except subprocess.TimeoutExpired:
         return False, "Authentication timed out (5 minutes)"
     except Exception as e:
-        return False, f"Authentication error: {str(e)[:200]}"
+        return False, f"Authentication error: {str(e)[:500]}"
