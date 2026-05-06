@@ -358,15 +358,15 @@ class TimelapsePlugin:
                     f"Failed to create Settings panel:\n{str(e)}",
                 )
                 return
-        else:
-            self._settings_dock.show()
-            self._settings_dock.raise_()
-        if self._settings_dock is not None:
-            self._settings_dock.show_ee_tab()
-            self.iface.messageBar().pushInfo(
-                "Timelapse",
-                "Please enter your Google Cloud project ID and click Save Settings.",
-            )
+
+        self._settings_dock.show()
+        self._settings_dock.raise_()
+        self.settings_action.setChecked(True)
+        self._settings_dock.show_ee_tab()
+        self.iface.messageBar().pushInfo(
+            "Timelapse",
+            "Please enter your Google Cloud project ID and click Save Settings.",
+        )
 
     def _post_deps_init(self):
         """One-time initialization after dependencies are confirmed ready."""
