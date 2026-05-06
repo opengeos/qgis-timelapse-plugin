@@ -3,7 +3,7 @@ name=Timelapse
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
-version=0.10.4
+version=0.10.5
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
@@ -33,6 +33,8 @@ experimental=False
 deprecated=False
 
 changelog=
+    0.10.5:
+        - Use ee.Authenticate(auth_mode='localhost:0') so the OAuth callback binds a kernel-assigned port instead of the default 8085, fixing "Address already in use" auth failures (#49)
     0.10.4:
         - Force ee.Authenticate(auth_mode='localhost') so authentication no longer requires the Google Cloud SDK on PATH (#49)
         - Log the full ee.Authenticate traceback to the Timelapse log channel instead of truncating at 200 chars

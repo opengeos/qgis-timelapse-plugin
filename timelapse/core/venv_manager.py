@@ -1451,17 +1451,19 @@ def authenticate_ee(
     env = _get_clean_env_for_venv()
     kwargs = _get_subprocess_kwargs()
 
-    # Force auth_mode='localhost' so we don't fall back to ee's default
-    # ('gcloud'), which requires the Google Cloud SDK to be installed and
-    # on PATH. 'localhost' opens a browser and runs a tiny callback server
-    # in the venv subprocess — works on a plain QGIS install with no
-    # extra tooling.
-    auth_code = "import ee; ee.Authenticate(auth_mode='localhost')"
+    # Use auth_mode='localhost:0' so ee's local OAuth callback server
+    # binds an ephemeral kernel-assigned port instead of the default
+    # 8085 — that fixed port collides with anything already listening
+    # there (issue #49 reproduced as "OSError: [Errno 48] Address
+    # already in use"). 'localhost' (without ':0') was the prior choice
+    # to avoid ee's gcloud default, which requires the Google Cloud SDK
+    # on PATH; the ':0' suffix is documented in ee.oauth.authenticate.
+    auth_code = "import ee; ee.Authenticate(auth_mode='localhost:0')"
 
     if progress_callback:
         progress_callback(50, "Waiting for browser authentication...")
 
-    _log("Running ee.Authenticate(auth_mode='localhost') in venv...")
+    _log("Running ee.Authenticate(auth_mode='localhost:0') in venv...")
 
     try:
         result = subprocess.run(  # nosec B603
