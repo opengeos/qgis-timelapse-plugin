@@ -4,6 +4,11 @@ import pytest
 
 from timelapse.core import external_sources, timelapse_core
 
+requires_pillow = pytest.mark.skipif(
+    timelapse_core.Image is None,
+    reason="Pillow is not installed in this environment.",
+)
+
 MINIMAL_WAYBACK_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <Capabilities xmlns="https://www.opengis.net/wmts/1.0"
   xmlns:ows="https://www.opengis.net/ows/1.1" version="1.0.0">
@@ -100,6 +105,7 @@ def test_qgis_xyz_uri_encodes_query_delimiters_inside_template():
     assert "%26style%3Db" in uri
 
 
+@requires_pillow
 def test_is_effectively_black_image_detects_black_renders(tmp_path):
     black_path = tmp_path / "black.png"
     color_path = tmp_path / "color.png"
@@ -110,6 +116,7 @@ def test_is_effectively_black_image_detects_black_renders(tmp_path):
     assert external_sources.is_effectively_black_image(str(color_path)) is False
 
 
+@requires_pillow
 def test_create_external_timelapse_skips_black_frames_and_forces_fps(
     monkeypatch, tmp_path
 ):
@@ -148,6 +155,7 @@ def test_create_external_timelapse_skips_black_frames_and_forces_fps(
     )
 
 
+@requires_pillow
 def test_create_external_timelapse_skips_duplicate_frames(monkeypatch, tmp_path):
     colors = [(40, 80, 120), (40, 80, 120), (120, 80, 40)]
 
@@ -186,6 +194,7 @@ def test_create_external_timelapse_skips_duplicate_frames(monkeypatch, tmp_path)
     )
 
 
+@requires_pillow
 def test_force_gif_frame_duration_updates_existing_gif(tmp_path):
     out_gif = tmp_path / "timing.gif"
     frame = timelapse_core.Image.new("RGB", (16, 16), (40, 80, 120))
