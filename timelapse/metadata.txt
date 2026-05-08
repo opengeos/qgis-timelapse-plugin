@@ -32,7 +32,7 @@ icon=icons/icon.png
 experimental=False
 deprecated=False
 
-changelog=
+changelog=Fix macOS QGIS installer dependency installation and bump patch version.
     0.11.0:
         - Add ESRI Wayback and custom XYZ template timelapse sources without requiring Earth Engine initialization
         - Filter black and duplicate external imagery frames and report kept/skipped frame counts
