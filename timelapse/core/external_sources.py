@@ -261,6 +261,35 @@ def is_effectively_black_image(
         return dark_pixels / total_pixels >= ratio_threshold
 
 
+def image_difference_score(
+    first_path: str,
+    second_path: str,
+    sample_size: int = 32,
+) -> float:
+    """Return average normalized RGB difference between two images."""
+    if timelapse_core.Image is None:
+        return 1.0
+
+    with timelapse_core.Image.open(first_path) as first_image:
+        first = first_image.convert("RGB").resize((sample_size, sample_size))
+        first_bytes = first.tobytes()
+    with timelapse_core.Image.open(second_path) as second_image:
+        second = second_image.convert("RGB").resize((sample_size, sample_size))
+        second_bytes = second.tobytes()
+
+    total_difference = sum(abs(a - b) for a, b in zip(first_bytes, second_bytes))
+    return total_difference / (len(first_bytes) * 255)
+
+
+def is_duplicate_image(
+    first_path: str,
+    second_path: str,
+    difference_threshold: float = 0.002,
+) -> bool:
+    """Return True when two rendered frames are visually equivalent."""
+    return image_difference_score(first_path, second_path) <= difference_threshold
+
+
 def force_gif_frame_duration(
     in_gif: str,
     out_gif: str,
@@ -420,6 +449,7 @@ def create_external_timelapse(
     mp4: bool = False,
     overlay_path: Optional[str] = None,
     skip_black_frames: bool = True,
+    skip_duplicate_frames: bool = True,
     progress_callback: Optional[Callable[[str], None]] = None,
 ) -> str:
     """Render external XYZ frames to GIF and optional MP4."""
@@ -433,6 +463,7 @@ def create_external_timelapse(
         image_paths: List[str] = []
         rendered_frames: List[ExternalFrame] = []
         skipped_black_frames = 0
+        skipped_duplicate_frames = 0
         for index, frame in enumerate(frames, start=1):
             if progress_callback is not None:
                 progress_callback(
@@ -452,6 +483,15 @@ def create_external_timelapse(
                 if progress_callback is not None:
                     progress_callback(f"Skipping black frame: {frame.label}")
                 continue
+            if (
+                skip_duplicate_frames
+                and image_paths
+                and is_duplicate_image(image_paths[-1], frame_path)
+            ):
+                skipped_duplicate_frames += 1
+                if progress_callback is not None:
+                    progress_callback(f"Skipping duplicate frame: {frame.label}")
+                continue
             image_paths.append(frame_path)
             rendered_frames.append(frame)
 
@@ -459,7 +499,8 @@ def create_external_timelapse(
             progress_callback(
                 "Frame summary: "
                 f"kept {len(rendered_frames)}/{len(frames)} frames; "
-                f"skipped {skipped_black_frames} black frames."
+                f"skipped {skipped_black_frames} black frames; "
+                f"skipped {skipped_duplicate_frames} duplicate frames."
             )
 
         if not image_paths:

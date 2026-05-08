@@ -142,7 +142,48 @@ def test_create_external_timelapse_skips_black_frames_and_forces_fps(
     with timelapse_core.Image.open(out_gif) as gif:
         assert gif.n_frames == 1
         assert gif.info["duration"] == 500
-    assert messages[-1] == "Frame summary: kept 1/2 frames; skipped 1 black frames."
+    assert messages[-1] == (
+        "Frame summary: kept 1/2 frames; skipped 1 black frames; "
+        "skipped 0 duplicate frames."
+    )
+
+
+def test_create_external_timelapse_skips_duplicate_frames(monkeypatch, tmp_path):
+    colors = [(40, 80, 120), (40, 80, 120), (120, 80, 40)]
+
+    def fake_render(
+        frame, bbox, out_path, dimensions, crs="EPSG:3857", overlay_path=None
+    ):
+        color = colors.pop(0)
+        timelapse_core.Image.new("RGB", (16, 16), color).save(out_path)
+
+    monkeypatch.setattr(external_sources, "render_xyz_frame", fake_render)
+
+    frames = [
+        external_sources.ExternalFrame("first", "https://example.test/{z}", "first"),
+        external_sources.ExternalFrame("duplicate", "https://example.test/{z}", "dup"),
+        external_sources.ExternalFrame(
+            "changed", "https://example.test/{z}", "changed"
+        ),
+    ]
+    out_gif = tmp_path / "external.gif"
+    messages = []
+
+    external_sources.create_external_timelapse(
+        frames=frames,
+        bbox={"xmin": -1, "ymin": -1, "xmax": 1, "ymax": 1},
+        out_gif=str(out_gif),
+        add_text=False,
+        progress_callback=messages.append,
+    )
+
+    with timelapse_core.Image.open(out_gif) as gif:
+        assert gif.n_frames == 2
+    assert "Skipping duplicate frame: duplicate" in messages
+    assert messages[-1] == (
+        "Frame summary: kept 2/3 frames; skipped 0 black frames; "
+        "skipped 1 duplicate frames."
+    )
 
 
 def test_force_gif_frame_duration_updates_existing_gif(tmp_path):
