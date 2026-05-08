@@ -292,7 +292,7 @@ def _is_python_executable_name(path: str) -> bool:
 
 
 def _is_macos_qgis_app_bundle_python(path: str) -> bool:
-    """Return True for Python binaries inside a QGIS macOS .app bundle."""
+    """Return True for unsafe Python launchers in QGIS.app/Contents/MacOS."""
     if not (platform.system() == "Darwin" or sys.platform == "darwin"):
         return False
     parts = os.path.abspath(path).split(os.sep)
@@ -300,7 +300,12 @@ def _is_macos_qgis_app_bundle_python(path: str) -> bool:
         lower = part.lower()
         if not (lower.startswith("qgis") and lower.endswith(".app")):
             continue
-        return idx + 1 < len(parts) and parts[idx + 1] == "Contents"
+        if idx + 2 >= len(parts):
+            return False
+        if parts[idx + 1].lower() != "contents" or parts[idx + 2].lower() != "macos":
+            return False
+        name = os.path.basename(path).lower()
+        return name.startswith("qgis") or _is_python_executable_name(path)
     return False
 
 
@@ -528,6 +533,12 @@ def create_venv(venv_dir=None, progress_callback=None):
         system_python = _get_system_python()
     except RuntimeError as exc:
         python_lookup_error = str(exc)
+    if python_lookup_error and system_python is None:
+        _log(
+            "Python lookup failed; falling back to uv-managed Python if "
+            f"available: {python_lookup_error}",
+            Qgis.MessageLevel.Warning,
+        )
     if system_python:
         _log(f"Using Python: {system_python}")
 
@@ -626,10 +637,12 @@ def create_venv(venv_dir=None, progress_callback=None):
         _cleanup_partial_venv(venv_dir)
         return False, "Virtual environment creation timed out"
     except FileNotFoundError:
+        missing_executable = cmd[0] if cmd else system_python
         _log(
-            f"Python executable not found: {system_python}", Qgis.MessageLevel.Critical
+            f"Venv creation executable not found: {missing_executable}",
+            Qgis.MessageLevel.Critical,
         )
-        return False, f"Python not found: {system_python}"
+        return False, f"Executable not found: {missing_executable}"
     except Exception as e:
         _log(f"Exception during venv creation: {str(e)}", Qgis.MessageLevel.Critical)
         _cleanup_partial_venv(venv_dir)
