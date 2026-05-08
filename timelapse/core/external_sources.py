@@ -227,7 +227,11 @@ def generated_dates(
 
 
 def qgis_xyz_uri(url_template: str) -> str:
-    """Build a QGIS WMS provider URI for an XYZ tile template."""
+    """Build the connection URI that QgsRasterLayer expects for an XYZ tile source.
+
+    The string is consumed by the QGIS ``wms`` provider running in XYZ
+    mode (``type=xyz``); it is not a WMS GetMap URL.
+    """
     encoded_url = urllib.parse.quote(url_template, safe=":/{}?")
     return f"type=xyz&url={encoded_url}&zmin=0&zmax=23"
 
@@ -438,7 +442,7 @@ def create_external_timelapse(
     dimensions: int = 768,
     frames_per_second: int = 5,
     crs: str = "EPSG:3857",
-    title: str = None,
+    title: Optional[str] = None,
     add_text: bool = True,
     font_size: int = 20,
     font_color: str = "white",
@@ -531,7 +535,7 @@ def create_external_timelapse(
             loop=loop,
         )
 
-    if title is not None and isinstance(title, str) and title.strip():
+    if title and title.strip():
         timelapse_core.add_text_to_gif(
             out_gif,
             out_gif,

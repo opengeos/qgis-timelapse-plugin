@@ -155,6 +155,7 @@ class TimelapseWorker(QThread):
                 "progress_bar_height": self.params.get("progress_bar_height", 5),
                 "title": self.params.get("title"),
                 "mp4": self.params.get("create_mp4", False),
+                "loop": self.params.get("loop", 0),
                 "overlay_data": overlay_data,
                 "overlay_color": self.params.get("overlay_color", "#FF0000"),
                 "overlay_width": self.params.get("overlay_width", 2),
@@ -319,6 +320,35 @@ class TimelapseWorker(QThread):
     def cancel(self):
         """Cancel the operation."""
         self.cancelled = True
+
+
+class EsriWaybackStatusWorker(QThread):
+    """Background worker that fetches and filters ESRI Wayback layers."""
+
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, start_year, end_year, step, max_frames, parent=None):
+        super().__init__(parent)
+        self.start_year = start_year
+        self.end_year = end_year
+        self.step = step
+        self.max_frames = max_frames
+
+    def run(self):
+        """Fetch and filter the Wayback layer list off the UI thread."""
+        try:
+            layers = external_sources.fetch_esri_wayback_layers()
+            selected = external_sources.filter_esri_wayback_layers(
+                layers,
+                self.start_year,
+                self.end_year,
+                step=self.step,
+                max_frames=self.max_frames,
+            )
+            self.finished.emit(list(selected))
+        except Exception as exc:
+            self.error.emit(str(exc))
 
 
 class BboxMapTool(QgsMapToolEmitPoint):
@@ -1272,28 +1302,48 @@ class TimelapseDockWidget(QDockWidget):
 
     def refresh_esri_wayback_status(self):
         """Fetch the ESRI Wayback layer count for the selected year range."""
-        try:
-            layers = external_sources.fetch_esri_wayback_layers()
-            selected = external_sources.filter_esri_wayback_layers(
-                layers,
-                self.start_year.value(),
-                self.end_year.value(),
-                step=self.year_step.value(),
-                max_frames=(
-                    self.external_max_frames.value()
-                    if self.external_max_frames.value() > 0
-                    else None
-                ),
+        if getattr(self, "_esri_status_worker", None) is not None:
+            return
+
+        max_frames_value = self.external_max_frames.value()
+        worker = EsriWaybackStatusWorker(
+            start_year=self.start_year.value(),
+            end_year=self.end_year.value(),
+            step=self.year_step.value(),
+            max_frames=max_frames_value if max_frames_value > 0 else None,
+            parent=self,
+        )
+        worker.finished.connect(self._on_esri_status_finished)
+        worker.error.connect(self._on_esri_status_error)
+        worker.finished.connect(self._clear_esri_status_worker)
+        worker.error.connect(self._clear_esri_status_worker)
+
+        self._esri_status_worker = worker
+        self.esri_refresh_btn.setEnabled(False)
+        self.esri_status.setText("Fetching layer list...")
+        worker.start()
+
+    def _on_esri_status_finished(self, selected):
+        """Update the status label when the Wayback worker succeeds."""
+        if selected:
+            self.esri_status.setText(
+                f"{len(selected)} frames from {selected[0].date} "
+                f"to {selected[-1].date}"
             )
-            if selected:
-                self.esri_status.setText(
-                    f"{len(selected)} frames from {selected[0].date} "
-                    f"to {selected[-1].date}"
-                )
-            else:
-                self.esri_status.setText("No layers match the selected years.")
-        except Exception as e:
-            self.esri_status.setText(f"Failed to fetch layers: {e}")
+        else:
+            self.esri_status.setText("No layers match the selected years.")
+
+    def _on_esri_status_error(self, message):
+        """Surface a Wayback worker failure in the status label."""
+        self.esri_status.setText(f"Failed to fetch layers: {message}")
+
+    def _clear_esri_status_worker(self, *args):
+        """Re-enable the refresh button and forget the finished worker."""
+        self.esri_refresh_btn.setEnabled(True)
+        worker = getattr(self, "_esri_status_worker", None)
+        if worker is not None:
+            worker.deleteLater()
+        self._esri_status_worker = None
 
     def update_aoi_method(self):
         """Update AOI controls based on selected method."""
