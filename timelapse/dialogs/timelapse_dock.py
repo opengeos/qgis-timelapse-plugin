@@ -50,7 +50,9 @@ from qgis.core import (
 )
 from qgis.gui import QgsMapToolEmitPoint, QgsRubberBand
 
-from ..core import timelapse_core
+from ..core import external_sources, timelapse_core
+
+EXTERNAL_IMAGERY_TYPES = {"ESRI Wayback", "Custom XYZ Template"}
 
 
 class TimelapseWorker(QThread):
@@ -72,6 +74,12 @@ class TimelapseWorker(QThread):
         """Execute the timelapse generation."""
         try:
             imagery_type = self.params.get("imagery_type", "Landsat")
+
+            if imagery_type in EXTERNAL_IMAGERY_TYPES:
+                result = self._run_external_timelapse(imagery_type)
+                self.progress.emit("Timelapse generation complete!")
+                self.finished.emit(result, self.params)
+                return
 
             # Check if EE is already initialized
             if not timelapse_core.is_ee_initialized():
@@ -147,6 +155,7 @@ class TimelapseWorker(QThread):
                 "progress_bar_height": self.params.get("progress_bar_height", 5),
                 "title": self.params.get("title"),
                 "mp4": self.params.get("create_mp4", False),
+                "loop": self.params.get("loop", 0),
                 "overlay_data": overlay_data,
                 "overlay_color": self.params.get("overlay_color", "#FF0000"),
                 "overlay_width": self.params.get("overlay_width", 2),
@@ -246,15 +255,100 @@ class TimelapseWorker(QThread):
                 }
                 result = timelapse_core.create_goes_timelapse(**goes_params)
 
+            else:
+                raise ValueError(f"Unsupported imagery type: {imagery_type}")
+
             self.progress.emit("Timelapse generation complete!")
             self.finished.emit(result, self.params)
 
         except Exception as e:
             self.error.emit(str(e))
 
+    def _run_external_timelapse(self, imagery_type):
+        """Render external XYZ/WMTS imagery without Earth Engine."""
+        self.progress.emit(f"Preparing {imagery_type} frames...")
+
+        if imagery_type == "ESRI Wayback":
+            frames = external_sources.esri_wayback_frames(
+                start_year=self.params.get("start_year", 2014),
+                end_year=self.params.get("end_year", datetime.now().year),
+                step=self.params.get("step", 1),
+                max_frames=self.params.get("external_max_frames"),
+            )
+        else:
+            frames = external_sources.custom_xyz_frames(
+                template=self.params.get("custom_xyz_template", ""),
+                explicit_dates=self.params.get("custom_xyz_dates", ""),
+                start_year=self.params.get("start_year", datetime.now().year),
+                end_year=self.params.get("end_year", datetime.now().year),
+                start_date=self.params.get("start_date", "01-01"),
+                end_date=self.params.get("end_date", "12-31"),
+                frequency=self.params.get("frequency", "year"),
+                step=self.params.get("step", 1),
+            )
+
+        overlay_path = None
+        if self.params.get("add_overlay") and self.params.get("overlay_data"):
+            if self.params.get("overlay_source") != "local":
+                raise ValueError(
+                    "EE FeatureCollection overlays are only supported for "
+                    "Earth Engine imagery. Use a local vector overlay for "
+                    "external imagery sources."
+                )
+            overlay_path = self.params.get("overlay_data")
+
+        return external_sources.create_external_timelapse(
+            frames=frames,
+            bbox=self.params.get("bbox"),
+            out_gif=self.params.get("output_path"),
+            dimensions=self.params.get("dimensions", 768),
+            frames_per_second=self.params.get("fps", 5),
+            crs=self.params.get("crs", "EPSG:3857"),
+            title=self.params.get("title"),
+            add_text=self.params.get("add_text", True),
+            font_size=self.params.get("font_size", 20),
+            font_color=self.params.get("font_color", "white"),
+            add_progress_bar=self.params.get("add_progress_bar", True),
+            progress_bar_color=self.params.get("progress_bar_color", "white"),
+            progress_bar_height=self.params.get("progress_bar_height", 5),
+            loop=self.params.get("loop", 0),
+            mp4=self.params.get("create_mp4", False),
+            overlay_path=overlay_path,
+            progress_callback=self.progress.emit,
+        )
+
     def cancel(self):
         """Cancel the operation."""
         self.cancelled = True
+
+
+class EsriWaybackStatusWorker(QThread):
+    """Background worker that fetches and filters ESRI Wayback layers."""
+
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+
+    def __init__(self, start_year, end_year, step, max_frames, parent=None):
+        super().__init__(parent)
+        self.start_year = start_year
+        self.end_year = end_year
+        self.step = step
+        self.max_frames = max_frames
+
+    def run(self):
+        """Fetch and filter the Wayback layer list off the UI thread."""
+        try:
+            layers = external_sources.fetch_esri_wayback_layers()
+            selected = external_sources.filter_esri_wayback_layers(
+                layers,
+                self.start_year,
+                self.end_year,
+                step=self.step,
+                max_frames=self.max_frames,
+            )
+            self.finished.emit(list(selected))
+        except Exception as exc:
+            self.error.emit(str(exc))
 
 
 class BboxMapTool(QgsMapToolEmitPoint):
@@ -387,22 +481,34 @@ class TimelapseDockWidget(QDockWidget):
         self.tabs.currentChanged.connect(self._on_tab_changed)
 
         layout.addWidget(self.tabs)
+        layout.addStretch(1)
 
         # Initialize imagery options after all tabs are created
         self.update_imagery_options()
 
         # Progress section
         progress_group = QGroupBox("Progress")
+        progress_group.setSizePolicy(
+            QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Maximum
+        )
         progress_layout = QVBoxLayout()
-        progress_layout.setSpacing(4)
+        progress_layout.setSpacing(6)
+        progress_layout.setContentsMargins(8, 12, 8, 8)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(False)
-        self.progress_bar.setMaximumHeight(8)
+        self.progress_bar.setFixedHeight(8)
+        self.progress_bar.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed
+        )
         progress_layout.addWidget(self.progress_bar)
 
         self.log_text = QTextEdit()
-        self.log_text.setMaximumHeight(80)
+        self.log_text.setMinimumHeight(72)
+        self.log_text.setMaximumHeight(180)
+        self.log_text.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Monospace", 8))
         progress_layout.addWidget(self.log_text)
@@ -561,7 +667,7 @@ class TimelapseDockWidget(QDockWidget):
         layout.addWidget(extent_group)
 
         # GEE Project
-        gee_group = QGroupBox("Google Earth Engine")
+        self.gee_group = QGroupBox("Google Earth Engine")
         gee_layout = QFormLayout()
 
         self.gee_project_edit = QLineEdit()
@@ -582,8 +688,8 @@ class TimelapseDockWidget(QDockWidget):
             pass
         gee_layout.addRow("Project ID:", self.gee_project_edit)
 
-        gee_group.setLayout(gee_layout)
-        layout.addWidget(gee_group)
+        self.gee_group.setLayout(gee_layout)
+        layout.addWidget(self.gee_group)
 
         layout.addStretch()
         return widget
@@ -600,7 +706,16 @@ class TimelapseDockWidget(QDockWidget):
 
         self.imagery_type = QComboBox()
         self.imagery_type.addItems(
-            ["Landsat", "Sentinel-2", "Sentinel-1", "MODIS NDVI", "GOES", "NAIP"]
+            [
+                "Landsat",
+                "Sentinel-2",
+                "Sentinel-1",
+                "MODIS NDVI",
+                "GOES",
+                "NAIP",
+                "ESRI Wayback",
+                "Custom XYZ Template",
+            ]
         )
         self.imagery_type.setStyleSheet("font-size: 12px; padding: 4px;")
         type_layout.addWidget(self.imagery_type)
@@ -832,6 +947,49 @@ class TimelapseDockWidget(QDockWidget):
         self.goes_group.setLayout(goes_layout)
         layout.addWidget(self.goes_group)
 
+        # External imagery options
+        self.external_group = QGroupBox("External Source Options")
+        external_layout = QFormLayout()
+
+        self.esri_refresh_btn = QPushButton("Refresh Wayback Layers")
+        external_layout.addRow(self.esri_refresh_btn)
+
+        self.esri_status = QLabel("Layer list will be fetched when the timelapse runs.")
+        self.esri_status.setWordWrap(True)
+        external_layout.addRow("ESRI:", self.esri_status)
+        self.esri_status_label = external_layout.labelForField(self.esri_status)
+
+        self.external_max_frames = QSpinBox()
+        self.external_max_frames.setRange(0, 500)
+        self.external_max_frames.setValue(0)
+        self.external_max_frames.setSpecialValueText("All")
+        external_layout.addRow("Max frames:", self.external_max_frames)
+        self.external_max_frames_label = external_layout.labelForField(
+            self.external_max_frames
+        )
+
+        self.custom_xyz_template = QLineEdit()
+        self.custom_xyz_template.setPlaceholderText(
+            "https://.../{yyyy}_{MM}/.../{z}/{x}/{y}.png"
+        )
+        external_layout.addRow("URL template:", self.custom_xyz_template)
+        self.custom_xyz_template_label = external_layout.labelForField(
+            self.custom_xyz_template
+        )
+
+        self.custom_xyz_dates = QTextEdit()
+        self.custom_xyz_dates.setPlaceholderText(
+            "Optional dates, one YYYY-MM-DD per line"
+        )
+        self.custom_xyz_dates.setMaximumHeight(80)
+        external_layout.addRow("Dates:", self.custom_xyz_dates)
+        self.custom_xyz_dates_label = external_layout.labelForField(
+            self.custom_xyz_dates
+        )
+
+        self.external_group.setLayout(external_layout)
+        layout.addWidget(self.external_group)
+
         layout.addStretch()
         return widget
 
@@ -1031,6 +1189,7 @@ class TimelapseDockWidget(QDockWidget):
         self.cancel_button.clicked.connect(self.cancel_timelapse)
 
         self.imagery_type.currentIndexChanged.connect(self.update_imagery_options)
+        self.esri_refresh_btn.clicked.connect(self.refresh_esri_wayback_status)
         self.aoi_method.currentIndexChanged.connect(self.update_aoi_method)
 
         self.font_color_btn.clicked.connect(lambda: self.pick_color("font"))
@@ -1073,6 +1232,7 @@ class TimelapseDockWidget(QDockWidget):
     def update_imagery_options(self):
         """Show/hide imagery-specific options."""
         imagery = self.imagery_type.currentText()
+        is_external = imagery in EXTERNAL_IMAGERY_TYPES
 
         self.naip_group.setVisible(imagery == "NAIP")
         self.landsat_group.setVisible(imagery == "Landsat")
@@ -1080,11 +1240,23 @@ class TimelapseDockWidget(QDockWidget):
         self.s1_group.setVisible(imagery == "Sentinel-1")
         self.modis_group.setVisible(imagery == "MODIS NDVI")
         self.goes_group.setVisible(imagery == "GOES")
+        self.external_group.setVisible(is_external)
+        self.esri_refresh_btn.setVisible(imagery == "ESRI Wayback")
+        self.esri_status.setVisible(imagery == "ESRI Wayback")
+        self.esri_status_label.setVisible(imagery == "ESRI Wayback")
+        self.external_max_frames.setVisible(imagery == "ESRI Wayback")
+        self.external_max_frames_label.setVisible(imagery == "ESRI Wayback")
+        self.custom_xyz_template.setVisible(imagery == "Custom XYZ Template")
+        self.custom_xyz_template_label.setVisible(imagery == "Custom XYZ Template")
+        self.custom_xyz_dates.setVisible(imagery == "Custom XYZ Template")
+        self.custom_xyz_dates_label.setVisible(imagery == "Custom XYZ Template")
 
         # Show/hide date range controls based on imagery type
         # GOES uses its own datetime fields, not year range
         is_goes = imagery == "GOES"
         self.date_group.setVisible(not is_goes)
+        if hasattr(self, "gee_group"):
+            self.gee_group.setVisible(not is_external)
 
         # Update start year based on imagery
         if imagery == "NAIP":
@@ -1099,6 +1271,15 @@ class TimelapseDockWidget(QDockWidget):
         elif imagery == "MODIS NDVI":
             self.start_year.setMinimum(2000)
             self.start_year.setValue(2010)
+        elif imagery == "ESRI Wayback":
+            self.start_year.setMinimum(2014)
+            self.start_year.setValue(2014)
+            self.start_date.setText("01-01")
+            self.end_date.setText("12-31")
+            self.frequency.setCurrentText("day")
+        elif imagery == "Custom XYZ Template":
+            self.start_year.setMinimum(1900)
+            self.start_year.setValue(datetime.now().year)
 
         # Update output filename based on imagery type
         self.update_output_filename(imagery)
@@ -1112,10 +1293,57 @@ class TimelapseDockWidget(QDockWidget):
             "MODIS NDVI": "modis_ndvi_timelapse.gif",
             "GOES": "goes_timelapse.gif",
             "NAIP": "naip_timelapse.gif",
+            "ESRI Wayback": "esri_wayback_timelapse.gif",
+            "Custom XYZ Template": "custom_xyz_timelapse.gif",
         }
         filename = filename_map.get(imagery_type, "timelapse.gif")
         output_dir = os.path.join(os.path.expanduser("~"), "Downloads")
         self.output_path.setText(os.path.join(output_dir, filename))
+
+    def refresh_esri_wayback_status(self):
+        """Fetch the ESRI Wayback layer count for the selected year range."""
+        if getattr(self, "_esri_status_worker", None) is not None:
+            return
+
+        max_frames_value = self.external_max_frames.value()
+        worker = EsriWaybackStatusWorker(
+            start_year=self.start_year.value(),
+            end_year=self.end_year.value(),
+            step=self.year_step.value(),
+            max_frames=max_frames_value if max_frames_value > 0 else None,
+            parent=self,
+        )
+        worker.finished.connect(self._on_esri_status_finished)
+        worker.error.connect(self._on_esri_status_error)
+        worker.finished.connect(self._clear_esri_status_worker)
+        worker.error.connect(self._clear_esri_status_worker)
+
+        self._esri_status_worker = worker
+        self.esri_refresh_btn.setEnabled(False)
+        self.esri_status.setText("Fetching layer list...")
+        worker.start()
+
+    def _on_esri_status_finished(self, selected):
+        """Update the status label when the Wayback worker succeeds."""
+        if selected:
+            self.esri_status.setText(
+                f"{len(selected)} frames from {selected[0].date} "
+                f"to {selected[-1].date}"
+            )
+        else:
+            self.esri_status.setText("No layers match the selected years.")
+
+    def _on_esri_status_error(self, message):
+        """Surface a Wayback worker failure in the status label."""
+        self.esri_status.setText(f"Failed to fetch layers: {message}")
+
+    def _clear_esri_status_worker(self, *args):
+        """Re-enable the refresh button and forget the finished worker."""
+        self.esri_refresh_btn.setEnabled(True)
+        worker = getattr(self, "_esri_status_worker", None)
+        if worker is not None:
+            worker.deleteLater()
+        self._esri_status_worker = None
 
     def update_aoi_method(self):
         """Update AOI controls based on selected method."""
@@ -1368,6 +1596,22 @@ class TimelapseDockWidget(QDockWidget):
             )
             return False
 
+        if self.imagery_type.currentText() == "Custom XYZ Template":
+            if not self.custom_xyz_template.text().strip():
+                QMessageBox.warning(
+                    self,
+                    "Invalid Input",
+                    "Please specify a custom XYZ URL template.",
+                )
+                return False
+            try:
+                external_sources.parse_explicit_dates(
+                    self.custom_xyz_dates.toPlainText()
+                )
+            except ValueError as e:
+                QMessageBox.warning(self, "Invalid Input", str(e))
+                return False
+
         return True
 
     def get_naip_bands(self):
@@ -1483,6 +1727,14 @@ class TimelapseDockWidget(QDockWidget):
             "goes_custom_blue": self.goes_blue_band.currentText(),
             "goes_start_datetime": self.goes_start_datetime.text(),
             "goes_end_datetime": self.goes_end_datetime.text(),
+            # External imagery
+            "external_max_frames": (
+                self.external_max_frames.value()
+                if self.external_max_frames.value() > 0
+                else None
+            ),
+            "custom_xyz_template": self.custom_xyz_template.text(),
+            "custom_xyz_dates": self.custom_xyz_dates.toPlainText(),
             # Visualization
             "add_text": self.add_text.isChecked(),
             "font_size": self.font_size.value(),
@@ -1492,6 +1744,7 @@ class TimelapseDockWidget(QDockWidget):
             "progress_bar_height": self.progress_height.value(),
             "title": self.title_text.text() or None,
             "create_mp4": self.create_mp4.isChecked(),
+            "loop": self.loop_count.value(),
             # Vector Overlay
             "add_overlay": self.add_overlay.isChecked(),
             "overlay_source": (
