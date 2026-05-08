@@ -2,8 +2,8 @@
 name=Timelapse
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
-description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, and MODIS NDVI) using Google Earth Engine
-version=0.10.6
+description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, MODIS NDVI, ESRI Wayback, and custom XYZ sources)
+version=0.11.0
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
@@ -33,6 +33,10 @@ experimental=False
 deprecated=False
 
 changelog=
+    0.11.0:
+        - Add ESRI Wayback and custom XYZ template timelapse sources without requiring Earth Engine initialization
+        - Filter black and duplicate external imagery frames and report kept/skipped frame counts
+        - Improve Progress section layout and apply output FPS to external-source GIFs
     0.10.6:
         - Shrink the timelapse dock's tab area to the current tab's content so the AOI / Output / Style tabs no longer leave a visible gap above the Progress section
         - Reorder Settings -> Earth Engine actions so Authenticate appears above Initialize
