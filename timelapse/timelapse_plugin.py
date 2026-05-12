@@ -13,9 +13,9 @@ from qgis.PyQt.QtCore import Qt, QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QMenu, QToolBar, QMessageBox
 
-
 TOOLBAR_OBJECT_NAME = "TimelapseToolbar"
 MENU_TITLE = "&Timelapse"
+
 
 class TimelapsePlugin:
     """Timelapse Plugin implementation class for QGIS."""
@@ -184,7 +184,6 @@ class TimelapsePlugin:
             status_tip=self.tr("About Timelapse Plugin"),
             parent=self.iface.mainWindow(),
         )
-
 
     def _remove_toolbar(self, toolbar):
         """Detach and schedule deletion of a plugin toolbar widget."""
