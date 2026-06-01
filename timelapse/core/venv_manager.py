@@ -1170,7 +1170,7 @@ def get_venv_status():
         A tuple of (is_ready: bool, message: str).
     """
     if not venv_exists():
-        return False, "Dependencies not installed"
+        return False, "Virtual environment not configured"
 
     site_packages = get_venv_site_packages()
     if site_packages is None:
