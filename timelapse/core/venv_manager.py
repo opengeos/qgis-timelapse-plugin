@@ -1169,13 +1169,8 @@ def get_venv_status():
     Returns:
         A tuple of (is_ready: bool, message: str).
     """
-    from .python_manager import standalone_python_exists
-
-    if not standalone_python_exists():
-        return False, "Dependencies not installed"
-
     if not venv_exists():
-        return False, "Virtual environment not configured"
+        return False, "Dependencies not installed"
 
     site_packages = get_venv_site_packages()
     if site_packages is None:
