@@ -56,6 +56,39 @@ def test_get_venv_status_accepts_pillow_import_and_lowercase_dist_info(
     assert venv_manager.get_venv_status() == (True, "Virtual environment ready")
 
 
+def test_get_venv_status_accepts_ready_venv_without_standalone_python(
+    tmp_path, monkeypatch
+):
+    """A ready venv remains valid if it was created without standalone Python."""
+    site_packages = tmp_path / "site-packages"
+    site_packages.mkdir()
+
+    _write_dist_info(
+        site_packages,
+        "earthengine_api-1.7.4.dist-info",
+        "earthengine-api",
+        "1.7.4",
+    )
+    _write_dist_info(site_packages, "numpy-2.3.5.dist-info", "numpy", "2.3.5")
+    _write_dist_info(site_packages, "pillow-12.1.1.dist-info", "Pillow", "12.1.1")
+    _write_dist_info(
+        site_packages,
+        "google_auth_oauthlib-1.2.3.dist-info",
+        "google-auth-oauthlib",
+        "1.2.3",
+    )
+
+    monkeypatch.setattr(python_manager, "standalone_python_exists", lambda: False)
+    monkeypatch.setattr(venv_manager, "venv_exists", lambda venv_dir=None: True)
+    monkeypatch.setattr(
+        venv_manager,
+        "get_venv_site_packages",
+        lambda venv_dir=None: str(site_packages),
+    )
+
+    assert venv_manager.get_venv_status() == (True, "Virtual environment ready")
+
+
 def test_check_dependencies_reports_versions_from_venv_site_packages(
     tmp_path, monkeypatch
 ):
