@@ -3,7 +3,7 @@ name=Timelapse
 qgisMinimumVersion=3.28
 qgisMaximumVersion=4.99
 description=Create timelapse animations from satellite and aerial imagery (NAIP, Landsat, Sentinel-2, Sentinel-1, GOES, MODIS NDVI, ESRI Wayback, and custom XYZ sources)
-version=0.11.1
+version=0.11.2
 author=Qiusheng Wu
 email=giswqs@gmail.com
 
