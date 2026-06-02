@@ -767,12 +767,14 @@ class TimelapseDockWidget(QDockWidget):
         freq_layout.setContentsMargins(0, 0, 0, 0)
         freq_layout.addWidget(QLabel("Frequency:"))
         self.frequency = QComboBox()
-        self.frequency.addItems(["year", "quarter", "month", "day"])
+        self.frequency.addItems(["year", "quarter", "month", "dekadal", "week", "day"])
         self.frequency.setToolTip(
             "Temporal frequency for compositing:\n"
             "• year: One composite per year\n"
             "• quarter: One composite per quarter (3 months)\n"
             "• month: One composite per month\n"
+            "• dekadal: Three composites per month (1-10, 11-20, 21-end)\n"
+            "• week: One composite per week\n"
             "• day: Daily composites (more data intensive)"
         )
         freq_layout.addWidget(self.frequency)
