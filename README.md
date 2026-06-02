@@ -231,7 +231,7 @@ qgis-timelapse-plugin/
 | Imagery Type     | NAIP, Landsat, Sentinel-2, Sentinel-1, MODIS NDVI, or GOES |
 | Start/End Year   | Temporal range for the timelapse                           |
 | Start/End Date   | Seasonal filter (MM-dd format)                             |
-| Frequency        | Year, quarter, month, dekadal, or day composites           |
+| Frequency        | Year, quarter, month, dekadal, week, or day composites     |
 | Year Step        | Interval between frames                                    |
 | Band Combination | Visualization bands                                        |
 | Max Cloud %      | Cloud coverage threshold (Sentinel-2)                      |

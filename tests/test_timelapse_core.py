@@ -3,6 +3,52 @@ import datetime
 from timelapse.core import timelapse_core
 
 
+def test_date_sequence_week_uses_seven_day_ranges_with_clipped_end():
+    ranges = timelapse_core.date_sequence(
+        start_year=2026,
+        end_year=2026,
+        start_date="01-01",
+        end_date="01-20",
+        frequency="week",
+        step=1,
+    )
+
+    assert ranges == [
+        (
+            datetime.date(2026, 1, 1),
+            datetime.date(2026, 1, 7),
+            "2026-01-01",
+        ),
+        (
+            datetime.date(2026, 1, 8),
+            datetime.date(2026, 1, 14),
+            "2026-01-08",
+        ),
+        (
+            datetime.date(2026, 1, 15),
+            datetime.date(2026, 1, 20),
+            "2026-01-15",
+        ),
+    ]
+
+
+def test_date_sequence_week_respects_step():
+    ranges = timelapse_core.date_sequence(
+        start_year=2026,
+        end_year=2026,
+        start_date="01-01",
+        end_date="01-31",
+        frequency="week",
+        step=2,
+    )
+
+    assert [label for _start, _end, label in ranges] == [
+        "2026-01-01",
+        "2026-01-15",
+        "2026-01-29",
+    ]
+
+
 def test_date_sequence_dekadal_uses_calendar_dekads():
     ranges = timelapse_core.date_sequence(
         start_year=2026,

@@ -575,7 +575,7 @@ def date_sequence(
         start_date: Start date within year (MM-dd).
         end_date: End date within year (MM-dd).
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         step: Step size.
 
     Returns:
@@ -671,6 +671,39 @@ def date_sequence(
                 label = f"{year}-{month:02d}"
                 dates.append((month_start, month_end, label))
 
+    elif frequency == "week":
+        selected_count = 0
+        for year in range(start_year, end_year + 1):
+            if start_month <= end_month:
+                seasonal_ranges = [
+                    (
+                        date(year, start_month, start_day),
+                        date(year, end_month, end_day),
+                    )
+                ]
+            else:
+                seasonal_ranges = [
+                    (
+                        date(year - 1, start_month, start_day),
+                        date(year, end_month, end_day),
+                    ),
+                    (
+                        date(year, start_month, start_day),
+                        date(year + 1, end_month, end_day),
+                    ),
+                ]
+
+            for season_start, season_end in seasonal_ranges:
+                current = max(season_start, date(year, 1, 1))
+                clipped_end = min(season_end, date(year, 12, 31))
+                while current <= clipped_end:
+                    week_end = min(current + timedelta(days=6), clipped_end)
+                    if selected_count % step == 0:
+                        label = current.strftime("%Y-%m-%d")
+                        dates.append((current, week_end, label))
+                    selected_count += 1
+                    current += timedelta(days=7)
+
     elif frequency == "dekadal":
         selected_count = 0
         for year in range(start_year, end_year + 1):
@@ -743,7 +776,8 @@ def create_timeseries(
         end_date: End date in 'YYYY-MM-dd' format.
         region: Region of interest.
         bands: List of band names.
-        frequency: Temporal frequency ('year', 'month', 'dekadal', 'day').
+        frequency: Temporal frequency ('year', 'month', 'dekadal',
+            'week', 'day').
         reducer: Reducer type ('median', 'mean', 'min', 'max').
         date_format: Output date format.
         drop_empty: Whether to drop empty images.
@@ -776,6 +810,7 @@ def create_timeseries(
             "year": "YYYY",
             "month": "YYYY-MM",
             "dekadal": "YYYY-MM-dd",
+            "week": "YYYY-MM-dd",
             "day": "YYYY-MM-dd",
         }
         date_format = date_formats.get(frequency, "YYYY-MM-dd")
@@ -788,6 +823,7 @@ def create_timeseries(
         "year": "year",
         "month": "month",
         "dekadal": "day",
+        "week": "week",
         "day": "day",
     }
     unit = freq_units.get(frequency, "year")
@@ -919,7 +955,7 @@ def sentinel2_timeseries(
         apply_fmask: Whether to apply cloud masking.
         cloud_pct: Maximum cloud percentage.
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         reducer: Reducer type.
         step: Step size.
 
@@ -1027,7 +1063,7 @@ def sentinel1_timeseries(
         bands: List of bands (VV, VH, HH, HV).
         orbit: Orbit direction ('ascending', 'descending', or both).
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         reducer: Reducer type.
         step: Step size.
 
@@ -1105,7 +1141,7 @@ def landsat_timeseries(
         end_date: End date within year (MM-dd).
         apply_fmask: Whether to apply cloud/shadow masking.
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         step: Step size.
 
     Returns:
@@ -1669,7 +1705,7 @@ def create_sentinel2_timelapse(
         loop: Loop count.
         mp4: Whether to also create MP4.
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         step: Step size.
 
     Returns:
@@ -1836,7 +1872,7 @@ def create_sentinel1_timelapse(
         loop: Loop count.
         mp4: Whether to also create MP4.
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         step: Step size.
 
     Returns:
@@ -2000,7 +2036,7 @@ def create_landsat_timelapse(
         loop: Loop count.
         mp4: Whether to also create MP4.
         frequency: Temporal frequency ('year', 'quarter', 'month',
-            'dekadal', 'day').
+            'dekadal', 'week', 'day').
         step: Step size.
 
     Returns:
